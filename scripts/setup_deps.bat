@@ -18,7 +18,7 @@ cd /d "%DEPS_DIR%"
 REM Clone and setup iPlug2
 if not exist "iPlug2" (
     echo Cloning iPlug2...
-    git clone --recurse-submodules https://github.com/iPlug2/iPlug2.git
+    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
     if errorlevel 1 (
         echo Failed to clone iPlug2!
         exit /b 1
@@ -31,7 +31,7 @@ if not exist "iPlug2" (
 REM Clone and build Visage
 if not exist "visage" (
     echo Cloning Visage...
-    git clone --recurse-submodules https://github.com/VitalAudio/visage.git
+    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/VitalAudio/visage.git
     if errorlevel 1 (
         echo Failed to clone Visage!
         exit /b 1
@@ -47,7 +47,7 @@ if not exist "visage" (
         echo CMake configuration for Visage failed!
         exit /b 1
     )
-    cmake --build . --config Release
+    cmake --build . --config Release --parallel
     if errorlevel 1 (
         echo Visage build failed!
         exit /b 1
@@ -64,7 +64,7 @@ if not exist "visage" (
             if not exist "build" mkdir build
             cd build
             cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
-            cmake --build . --config Release
+            cmake --build . --config Release --parallel
             cd ..\..
         )
     )

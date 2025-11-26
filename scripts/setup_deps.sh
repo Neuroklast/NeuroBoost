@@ -18,7 +18,7 @@ cd "$DEPS_DIR"
 # Clone and setup iPlug2
 if [ ! -d "iPlug2" ]; then
     echo "Cloning iPlug2..."
-    git clone --recurse-submodules https://github.com/iPlug2/iPlug2.git
+    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
     echo "iPlug2 cloned successfully"
 else
     echo "iPlug2 already exists, skipping clone"
@@ -27,14 +27,14 @@ fi
 # Clone and build Visage
 if [ ! -d "visage" ]; then
     echo "Cloning Visage..."
-    git clone --recurse-submodules https://github.com/VitalAudio/visage.git
+    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/VitalAudio/visage.git
     cd visage
     
     echo "Building Visage..."
     mkdir -p build
     cd build
     cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
-    cmake --build . --config Release
+    cmake --build . --config Release --parallel
     cd ../..
     
     echo "Visage built successfully"
@@ -46,7 +46,7 @@ else
         mkdir -p build
         cd build
         cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
-        cmake --build . --config Release
+        cmake --build . --config Release --parallel
         cd ../..
     else
         echo "Visage already built"
