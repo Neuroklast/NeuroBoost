@@ -1,0 +1,57 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# Dependencies (downloaded by setup script)
+deps/
+
+# IDE files
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+*.sln
+*.vcxproj*
+*.suo
+*.user
+*.sdf
+*.opensdf
+*.db
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Plugin outputs
+*.vst
+*.vst3/
+*.component/
+*.aaxplugin/
+*.clap
+*.app/
+*.dpm
+*.aax
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Package files
+*.zip
+*.tar.gz
+*.dmg
