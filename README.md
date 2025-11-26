@@ -2,8 +2,6 @@
 
 A simple audio gain plugin built with [iPlug2](https://github.com/iPlug2/iPlug2) and [Visage](https://github.com/VitalAudio/visage) UI library.
 
-![NeuroBoost Plugin](docs/screenshot.png)
-
 ## Features
 
 - Simple gain control with a single knob

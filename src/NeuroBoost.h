@@ -13,7 +13,8 @@ enum EParams
   kNumParams
 };
 
-using namespace iplug;
+// Constants for UI
+static constexpr float kKnobSize = 120.0f;
 
 // Custom knob control for Visage
 class GainKnob : public visage::Frame
@@ -39,7 +40,7 @@ private:
   visage::CallbackList<void(double)> mOnValueChange;
 };
 
-class NeuroBoost final : public Plugin
+class NeuroBoost final : public iplug::Plugin
 {
 public:
   NeuroBoost(const InstanceInfo& info);

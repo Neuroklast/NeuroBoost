@@ -3,6 +3,8 @@
 #include "visage_windowing/windowing.h"
 #include "visage_utils/dimension.h"
 #include <cmath>
+#include <sstream>
+#include <iomanip>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -137,9 +139,10 @@ void* NeuroBoost::OpenWindow(void* pParent)
     
     // Draw value
     double gainValue = GetParam(kGain)->Value();
-    char valueStr[32];
-    snprintf(valueStr, sizeof(valueStr), "%.1f%%", gainValue);
-    canvas.text(valueStr, labelFont, visage::Font::kCenter, 
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1) << gainValue << "%";
+    std::string valueStr = oss.str();
+    canvas.text(valueStr.c_str(), labelFont, visage::Font::kCenter, 
                 0.0f, static_cast<float>(mEditor->height()) - 30.0f, 
                 static_cast<float>(mEditor->width()), 30.0f);
   };
@@ -149,10 +152,9 @@ void* NeuroBoost::OpenWindow(void* pParent)
   mGainKnob = std::make_unique<GainKnob>();
   mEditor->addChild(mGainKnob.get());
   
-  float knobSize = 120.0f;
-  float centerX = (static_cast<float>(mEditor->width()) - knobSize) / 2.0f;
-  float centerY = (static_cast<float>(mEditor->height()) - knobSize) / 2.0f;
-  mGainKnob->setBounds(centerX, centerY, knobSize, knobSize);
+  float centerX = (static_cast<float>(mEditor->width()) - kKnobSize) / 2.0f;
+  float centerY = (static_cast<float>(mEditor->height()) - kKnobSize) / 2.0f;
+  mGainKnob->setBounds(centerX, centerY, kKnobSize, kKnobSize);
   
   mGainKnob->setValue(GetParam(kGain)->Value() / 200.0);
   
@@ -181,10 +183,9 @@ void NeuroBoost::OnParentWindowResize(int width, int height)
     
     if (mGainKnob)
     {
-      float knobSize = 120.0f;
-      float centerX = (static_cast<float>(width) - knobSize) / 2.0f;
-      float centerY = (static_cast<float>(height) - knobSize) / 2.0f;
-      mGainKnob->setBounds(centerX, centerY, knobSize, knobSize);
+      float centerX = (static_cast<float>(width) - kKnobSize) / 2.0f;
+      float centerY = (static_cast<float>(height) - kKnobSize) / 2.0f;
+      mGainKnob->setBounds(centerX, centerY, kKnobSize, kKnobSize);
     }
   }
 }
@@ -200,6 +201,7 @@ void NeuroBoost::CloseWindow()
   mWindow.reset();
   mEditor.reset();
   
+  OnUIClose();
   IEditorDelegate::CloseWindow();
 }
 
