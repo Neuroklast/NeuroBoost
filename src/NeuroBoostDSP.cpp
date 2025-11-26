@@ -7,6 +7,11 @@
 #include <cstdlib>
 #include <cstring>
 
+// Define M_PI if not available (portable fallback)
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Test program for DSP functionality
 #ifndef NEUROBOOST_DSP_LIB_ONLY
 
@@ -53,8 +58,10 @@ int main(int argc, char* argv[])
         inputBuffer[1][s] = value;
     }
     
-    // Copy input to output (for comparison)
-    std::memcpy(outputBuffer, inputBuffer, sizeof(inputBuffer));
+    // Copy input to output for each channel (for comparison)
+    for (int c = 0; c < numChannels; c++) {
+        std::memcpy(outputBuffer[c], inputBuffer[c], sizeof(sample) * numFrames);
+    }
     
     // Process audio
     dsp.ProcessBlock(inputs, outputs, numFrames, numChannels);
