@@ -6,140 +6,363 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Options
-option(BUILD_VST3 "Build VST3 plugin" ON)
-option(BUILD_STANDALONE "Build standalone application" ON)
+option(BUILD_DSP_TEST "Build DSP test executable (no dependencies required)" ON)
+option(BUILD_VST3 "Build VST3 plugin (requires iPlug2 and Visage)" OFF)
+option(BUILD_STANDALONE "Build standalone application (requires iPlug2 and Visage)" OFF)
 option(BUILD_AU "Build Audio Unit plugin" OFF)
 
 # Set paths for dependencies
-set(IPLUG2_ROOT "${CMAKE_SOURCE_DIR}/deps/iPlug2" CACHE PATH "Path to iPlug2")
-set(VISAGE_ROOT "${CMAKE_SOURCE_DIR}/deps/visage" CACHE PATH "Path to Visage")
+set(DEPS_DIR "${CMAKE_SOURCE_DIR}/deps")
+set(IPLUG2_ROOT "${DEPS_DIR}/iPlug2" CACHE PATH "Path to iPlug2")
+set(VISAGE_ROOT "${DEPS_DIR}/visage" CACHE PATH "Path to Visage")
 
 # Plugin info from config
 set(PLUG_NAME "NeuroBoost")
 set(PLUG_MFR "Neuroklast")
 set(PLUG_VERSION "1.0.0")
 
-# Source files
-set(PLUGIN_SOURCES
-    src/NeuroBoost.cpp
-    src/NeuroBoost.h
-    config.h
-)
-
-# Check if dependencies exist
-if(NOT EXISTS "${IPLUG2_ROOT}")
-    message(FATAL_ERROR 
-        "iPlug2 not found at ${IPLUG2_ROOT}\n"
-        "Please run scripts/setup_deps.sh (Unix) or scripts/setup_deps.bat (Windows) first.")
-endif()
-
-if(NOT EXISTS "${VISAGE_ROOT}")
-    message(FATAL_ERROR 
-        "Visage not found at ${VISAGE_ROOT}\n"
-        "Please run scripts/setup_deps.sh (Unix) or scripts/setup_deps.bat (Windows) first.")
-endif()
-
-# iPlug2 include directories
-set(IPLUG_INCLUDES
-    ${IPLUG2_ROOT}
-    ${IPLUG2_ROOT}/IPlug
-    ${IPLUG2_ROOT}/IPlug/Extras
-    ${IPLUG2_ROOT}/WDL
-    ${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK
-)
-
-# Visage include directories
-set(VISAGE_INCLUDES
-    ${VISAGE_ROOT}
-)
-
-# Common include directories
-set(COMMON_INCLUDES
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/src
-    ${IPLUG_INCLUDES}
-    ${VISAGE_INCLUDES}
-)
-
-# Find Visage library
-set(VISAGE_LIBRARY "")
-if(EXISTS "${VISAGE_ROOT}/build/libvisage.a")
-    set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/libvisage.a")
-elseif(EXISTS "${VISAGE_ROOT}/build/Release/visage.lib")
-    set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/Release/visage.lib")
-elseif(EXISTS "${VISAGE_ROOT}/build/Debug/visage.lib")
-    set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/Debug/visage.lib")
-endif()
-
-if(NOT VISAGE_LIBRARY)
-    message(WARNING "Visage library not found. Run scripts/setup_deps.sh to build Visage.")
-endif()
-
-# Common compile definitions
-set(COMMON_DEFINITIONS
-    PLUG_NAME="${PLUG_NAME}"
-    PLUG_MFR="${PLUG_MFR}"
-    IPLUG_DSP=1
-    IPLUG_EDITOR=1
-    NO_IGRAPHICS
-)
-
-# Platform-specific settings
-if(APPLE)
-    list(APPEND COMMON_DEFINITIONS OS_MAC)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS version")
+# ============================================================================
+# DSP Test Target (no external dependencies - always buildable)
+# ============================================================================
+if(BUILD_DSP_TEST)
+    message(STATUS "Configuring DSP test executable...")
     
-    # macOS frameworks required for Visage
-    find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
-    find_library(METAL_FRAMEWORK Metal REQUIRED)
-    find_library(METALKIT_FRAMEWORK MetalKit REQUIRED)
-    find_library(QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
-    
-    set(PLATFORM_LIBS
-        ${COCOA_FRAMEWORK}
-        ${METAL_FRAMEWORK}
-        ${METALKIT_FRAMEWORK}
-        ${QUARTZCORE_FRAMEWORK}
+    add_executable(NeuroBoost_DSP_Test
+        ${CMAKE_SOURCE_DIR}/src/NeuroBoostDSP.cpp
+        ${CMAKE_SOURCE_DIR}/src/NeuroBoostDSP.h
     )
-elseif(WIN32)
-    list(APPEND COMMON_DEFINITIONS OS_WIN NOMINMAX WIN32_LEAN_AND_MEAN)
     
-    set(PLATFORM_LIBS
-        d3d11
-        dxgi
-        dxguid
-        d3dcompiler
+    target_include_directories(NeuroBoost_DSP_Test PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
     )
-elseif(UNIX)
-    list(APPEND COMMON_DEFINITIONS OS_LINUX)
     
-    find_package(X11 REQUIRED)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-    
-    set(PLATFORM_LIBS
-        ${X11_LIBRARIES}
-        ${GTK3_LIBRARIES}
-        GL
-        pthread
+    target_compile_definitions(NeuroBoost_DSP_Test PRIVATE
+        _USE_MATH_DEFINES
     )
+    
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(NeuroBoost_DSP_Test PRIVATE m)
+    endif()
+    
+    set_target_properties(NeuroBoost_DSP_Test PROPERTIES
+        OUTPUT_NAME "NeuroBoost_DSP_Test"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+    
+    # Enable testing
+    enable_testing()
+    
+    # Add tests for different gain values
+    add_test(NAME DSP_Test_Unity_Gain 
+             COMMAND NeuroBoost_DSP_Test 100)
+    add_test(NAME DSP_Test_Half_Gain 
+             COMMAND NeuroBoost_DSP_Test 50)
+    add_test(NAME DSP_Test_Double_Gain 
+             COMMAND NeuroBoost_DSP_Test 200)
+    add_test(NAME DSP_Test_Mute 
+             COMMAND NeuroBoost_DSP_Test 0)
 endif()
 
-# Create a library for the plugin common code
-add_library(NeuroBoost_common OBJECT ${PLUGIN_SOURCES})
-target_include_directories(NeuroBoost_common PRIVATE ${COMMON_INCLUDES})
-target_compile_definitions(NeuroBoost_common PRIVATE ${COMMON_DEFINITIONS})
+# ============================================================================
+# Full Plugin Targets (requires iPlug2 and Visage)
+# ============================================================================
+if(BUILD_VST3 OR BUILD_STANDALONE)
+    # Include FetchContent for downloading dependencies
+    include(FetchContent)
+    
+    # Fetch iPlug2 if not present
+    if(NOT EXISTS "${IPLUG2_ROOT}")
+        message(STATUS "Downloading iPlug2...")
+        FetchContent_Declare(
+            iPlug2
+            GIT_REPOSITORY https://github.com/iPlug2/iPlug2.git
+            GIT_TAG master
+            GIT_SHALLOW TRUE
+            SOURCE_DIR "${IPLUG2_ROOT}"
+        )
+        FetchContent_MakeAvailable(iPlug2)
+    endif()
+    
+    # Check for Visage
+    if(NOT EXISTS "${VISAGE_ROOT}")
+        message(STATUS "Visage not found. Please run scripts/setup_deps.sh first to download and build Visage.")
+        message(STATUS "Visage requires additional system dependencies:")
+        message(STATUS "  - Linux: libx11-dev, libgl1-mesa-dev, libfreetype6-dev, libgtk-3-dev")
+        message(STATUS "  - macOS: Xcode Command Line Tools")
+        message(STATUS "  - Windows: Visual Studio with C++ support")
+    endif()
+    
+    # Plugin source files
+    set(PLUGIN_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/NeuroBoost.cpp
+        ${CMAKE_SOURCE_DIR}/src/NeuroBoost.h
+        ${CMAKE_SOURCE_DIR}/config.h
+    )
+    
+    # iPlug2 core source files
+    set(IPLUG_CORE_SOURCES
+        ${IPLUG2_ROOT}/IPlug/IPlugAPIBase.cpp
+        ${IPLUG2_ROOT}/IPlug/IPlugParameter.cpp
+        ${IPLUG2_ROOT}/IPlug/IPlugPaths.cpp
+        ${IPLUG2_ROOT}/IPlug/IPlugPluginBase.cpp
+        ${IPLUG2_ROOT}/IPlug/IPlugProcessor.cpp
+        ${IPLUG2_ROOT}/IPlug/IPlugTimer.cpp
+    )
+    
+    # iPlug2 include directories
+    set(IPLUG_INCLUDES
+        ${IPLUG2_ROOT}
+        ${IPLUG2_ROOT}/IPlug
+        ${IPLUG2_ROOT}/IPlug/Extras
+        ${IPLUG2_ROOT}/WDL
+        ${IPLUG2_ROOT}/WDL/swell
+        ${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK
+    )
+    
+    # Visage include directories
+    set(VISAGE_INCLUDES
+        ${VISAGE_ROOT}
+        ${VISAGE_ROOT}/visage_app
+        ${VISAGE_ROOT}/visage_core
+        ${VISAGE_ROOT}/visage_graphics
+        ${VISAGE_ROOT}/visage_ui
+        ${VISAGE_ROOT}/visage_utils
+        ${VISAGE_ROOT}/visage_windowing
+        ${VISAGE_ROOT}/third_party
+    )
+    
+    # Common include directories
+    set(COMMON_INCLUDES
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${IPLUG_INCLUDES}
+        ${VISAGE_INCLUDES}
+    )
+    
+    # Common compile definitions
+    set(COMMON_DEFINITIONS
+        PLUG_NAME="${PLUG_NAME}"
+        PLUG_MFR="${PLUG_MFR}"
+        IPLUG_DSP=1
+        IPLUG_EDITOR=1
+        NO_IGRAPHICS
+        SAMPLE_TYPE_FLOAT
+        _USE_MATH_DEFINES
+    )
+    
+    # Platform-specific settings
+    if(APPLE)
+        list(APPEND COMMON_DEFINITIONS OS_MAC SWELL_PROVIDED_BY_APP)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS version")
+        
+        # macOS frameworks
+        find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+        find_library(METAL_FRAMEWORK Metal REQUIRED)
+        find_library(METALKIT_FRAMEWORK MetalKit REQUIRED)
+        find_library(QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
+        find_library(COREAUDIO_FRAMEWORK CoreAudio REQUIRED)
+        find_library(COREMIDI_FRAMEWORK CoreMIDI REQUIRED)
+        find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
+        find_library(ACCELERATE_FRAMEWORK Accelerate REQUIRED)
+        
+        set(PLATFORM_LIBS
+            ${COCOA_FRAMEWORK}
+            ${METAL_FRAMEWORK}
+            ${METALKIT_FRAMEWORK}
+            ${QUARTZCORE_FRAMEWORK}
+            ${COREAUDIO_FRAMEWORK}
+            ${COREMIDI_FRAMEWORK}
+            ${AUDIOTOOLBOX_FRAMEWORK}
+            ${ACCELERATE_FRAMEWORK}
+        )
+        
+        set(SWELL_SOURCES
+            ${IPLUG2_ROOT}/WDL/swell/swell-modstub-generic.cpp
+        )
+    elseif(WIN32)
+        list(APPEND COMMON_DEFINITIONS OS_WIN NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+        
+        set(PLATFORM_LIBS
+            d3d11
+            dxgi
+            dxguid
+            d3dcompiler
+            winmm
+            ole32
+            uuid
+        )
+        
+        set(SWELL_SOURCES "")
+    elseif(UNIX)
+        list(APPEND COMMON_DEFINITIONS OS_LINUX SWELL_PROVIDED_BY_APP)
+        
+        find_package(X11 REQUIRED)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(GTK3 gtk+-3.0)
+        pkg_check_modules(ALSA alsa)
+        
+        set(PLATFORM_LIBS
+            ${X11_LIBRARIES}
+            GL
+            pthread
+            dl
+        )
+        
+        if(GTK3_FOUND)
+            list(APPEND PLATFORM_LIBS ${GTK3_LIBRARIES})
+            list(APPEND COMMON_INCLUDES ${GTK3_INCLUDE_DIRS})
+        endif()
+        
+        if(ALSA_FOUND)
+            list(APPEND PLATFORM_LIBS ${ALSA_LIBRARIES})
+            list(APPEND COMMON_INCLUDES ${ALSA_INCLUDE_DIRS})
+        endif()
+        
+        set(SWELL_SOURCES
+            ${IPLUG2_ROOT}/WDL/swell/swell-modstub-generic.cpp
+        )
+    endif()
+    
+    # Find Visage library
+    set(VISAGE_LIBRARY "")
+    if(EXISTS "${VISAGE_ROOT}/build/libvisage.a")
+        set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/libvisage.a")
+    elseif(EXISTS "${VISAGE_ROOT}/build/Release/visage.lib")
+        set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/Release/visage.lib")
+    elseif(EXISTS "${VISAGE_ROOT}/build/Debug/visage.lib")
+        set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/Debug/visage.lib")
+    elseif(TARGET visage)
+        set(VISAGE_LIBRARY visage)
+    endif()
+    
+    # Build Visage if not already built
+    if(NOT VISAGE_LIBRARY AND EXISTS "${VISAGE_ROOT}/CMakeLists.txt")
+        message(STATUS "Building Visage library...")
+        set(VISAGE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(VISAGE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        add_subdirectory(${VISAGE_ROOT} ${CMAKE_BINARY_DIR}/visage_build EXCLUDE_FROM_ALL)
+        if(TARGET visage)
+            set(VISAGE_LIBRARY visage)
+        endif()
+    endif()
+    
+    # Create standalone target
+    if(BUILD_STANDALONE AND EXISTS "${IPLUG2_ROOT}" AND VISAGE_LIBRARY)
+        message(STATUS "Configuring standalone application...")
+        
+        set(STANDALONE_SOURCES
+            ${PLUGIN_SOURCES}
+            ${IPLUG_CORE_SOURCES}
+            ${SWELL_SOURCES}
+        )
+        
+        add_executable(NeuroBoost_Standalone ${STANDALONE_SOURCES})
+        
+        target_include_directories(NeuroBoost_Standalone PRIVATE ${COMMON_INCLUDES})
+        target_compile_definitions(NeuroBoost_Standalone PRIVATE 
+            ${COMMON_DEFINITIONS}
+            APP_API
+            IPLUG_APP
+        )
+        
+        target_link_libraries(NeuroBoost_Standalone PRIVATE ${VISAGE_LIBRARY} ${PLATFORM_LIBS})
+        
+        set_target_properties(NeuroBoost_Standalone PROPERTIES
+            OUTPUT_NAME "NeuroBoost"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        )
+    elseif(BUILD_STANDALONE)
+        message(WARNING "Cannot build standalone: iPlug2 or Visage not available")
+    endif()
+    
+    # Create VST3 target
+    if(BUILD_VST3 AND EXISTS "${IPLUG2_ROOT}" AND VISAGE_LIBRARY)
+        message(STATUS "Configuring VST3 plugin...")
+        
+        set(VST3_SDK_ROOT "${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK")
+        
+        if(EXISTS "${VST3_SDK_ROOT}")
+            set(VST3_INCLUDES
+                ${VST3_SDK_ROOT}
+                ${VST3_SDK_ROOT}/base/source
+                ${VST3_SDK_ROOT}/pluginterfaces
+                ${VST3_SDK_ROOT}/public.sdk/source/common
+                ${VST3_SDK_ROOT}/public.sdk/source/vst
+                ${VST3_SDK_ROOT}/public.sdk/source/vst/hosting
+            )
+            
+            file(GLOB VST3_SDK_SOURCES
+                "${VST3_SDK_ROOT}/base/source/*.cpp"
+                "${VST3_SDK_ROOT}/public.sdk/source/common/*.cpp"
+                "${VST3_SDK_ROOT}/public.sdk/source/vst/*.cpp"
+            )
+            
+            set(IPLUG_VST3_SOURCES
+                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3.cpp
+                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Controller.cpp
+                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Processor.cpp
+                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp
+            )
+            
+            set(VST3_SOURCES
+                ${PLUGIN_SOURCES}
+                ${IPLUG_CORE_SOURCES}
+                ${IPLUG_VST3_SOURCES}
+                ${VST3_SDK_SOURCES}
+                ${SWELL_SOURCES}
+            )
+            
+            add_library(NeuroBoost_VST3 MODULE ${VST3_SOURCES})
+            
+            target_include_directories(NeuroBoost_VST3 PRIVATE 
+                ${COMMON_INCLUDES}
+                ${VST3_INCLUDES}
+            )
+            
+            target_compile_definitions(NeuroBoost_VST3 PRIVATE 
+                ${COMMON_DEFINITIONS}
+                VST3_API
+                IPLUG_VST3
+            )
+            
+            target_link_libraries(NeuroBoost_VST3 PRIVATE ${VISAGE_LIBRARY} ${PLATFORM_LIBS})
+            
+            set_target_properties(NeuroBoost_VST3 PROPERTIES
+                OUTPUT_NAME "NeuroBoost"
+                LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vst3"
+                PREFIX ""
+            )
+            
+            if(APPLE)
+                set_target_properties(NeuroBoost_VST3 PROPERTIES
+                    BUNDLE TRUE
+                    BUNDLE_EXTENSION "vst3"
+                    MACOSX_BUNDLE_GUI_IDENTIFIER "com.neuroklast.neuroboost.vst3"
+                    MACOSX_BUNDLE_BUNDLE_NAME "NeuroBoost"
+                    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+                )
+            elseif(WIN32)
+                set_target_properties(NeuroBoost_VST3 PROPERTIES
+                    SUFFIX ".vst3"
+                )
+            else()
+                set_target_properties(NeuroBoost_VST3 PROPERTIES
+                    SUFFIX ".so"
+                )
+            endif()
+        else()
+            message(WARNING "VST3 SDK not found at ${VST3_SDK_ROOT}")
+        endif()
+    elseif(BUILD_VST3)
+        message(WARNING "Cannot build VST3: iPlug2 or Visage not available")
+    endif()
+endif()
 
+message(STATUS "")
 message(STATUS "NeuroBoost CMake configuration complete")
+message(STATUS "  - DSP Test build: ${BUILD_DSP_TEST}")
 message(STATUS "  - VST3 build: ${BUILD_VST3}")
 message(STATUS "  - Standalone build: ${BUILD_STANDALONE}")
-message(STATUS "  - Audio Unit build: ${BUILD_AU}")
 message(STATUS "  - iPlug2 root: ${IPLUG2_ROOT}")
 message(STATUS "  - Visage root: ${VISAGE_ROOT}")
-if(VISAGE_LIBRARY)
-    message(STATUS "  - Visage library: ${VISAGE_LIBRARY}")
-endif()
-
-# Note: Full VST3 and Standalone targets require the complete iPlug2 build system.
-# For production builds, use the iPlug2 project generator or Visual Studio/Xcode projects.
-# This CMake configuration serves as a reference for the project structure.

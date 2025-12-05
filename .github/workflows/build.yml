@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-dsp-test:
+    name: Build DSP Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     
     strategy:
@@ -20,41 +21,100 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup dependencies (Ubuntu)
+    - name: Setup CMake (Ubuntu)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake git libx11-dev libgl1-mesa-dev libasound2-dev libgtk-3-dev
+        sudo apt-get install -y build-essential cmake
     
-    - name: Setup dependencies (macOS)
+    - name: Setup CMake (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install cmake
+        brew install cmake || true
     
-    - name: Clone dependencies
+    - name: Configure DSP Test
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
+    
+    - name: Build DSP Test
+      run: |
+        cd build
+        cmake --build . --config Release
+    
+    - name: Run Tests
+      run: |
+        cd build
+        ctest --output-on-failure --build-config Release
+    
+    - name: Run DSP Test manually
       shell: bash
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ./build/bin/Release/NeuroBoost_DSP_Test.exe 100
+          ./build/bin/Release/NeuroBoost_DSP_Test.exe 50
+          ./build/bin/Release/NeuroBoost_DSP_Test.exe 200
+        else
+          ./build/bin/NeuroBoost_DSP_Test 100
+          ./build/bin/NeuroBoost_DSP_Test 50
+          ./build/bin/NeuroBoost_DSP_Test 200
+        fi
+
+  build-full-plugin:
+    name: Build Full Plugin (Ubuntu)
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Visage build may fail due to dependencies
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake git \
+          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+          libgl1-mesa-dev libfreetype6-dev libharfbuzz-dev \
+          libasound2-dev libgtk-3-dev pkg-config
+    
+    - name: Clone iPlug2
       run: |
         mkdir -p deps
         cd deps
-        git clone --recurse-submodules https://github.com/iPlug2/iPlug2.git || true
-        git clone --recurse-submodules https://github.com/VitalAudio/visage.git || true
+        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+    
+    - name: Clone Visage
+      run: |
+        cd deps
+        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/VitalAudio/visage.git
     
     - name: Build Visage
-      shell: bash
+      continue-on-error: true
       run: |
         cd deps/visage
         mkdir -p build
         cd build
         cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
-        cmake --build . --config Release
+        cmake --build . --config Release --parallel 2
     
-    - name: Configure NeuroBoost
+    - name: Configure NeuroBoost (DSP only if Visage failed)
       run: |
         mkdir -p build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Release ..
+        if [ -f ../deps/visage/build/libvisage.a ]; then
+          echo "Visage built successfully, building full plugin..."
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_VST3=ON -DBUILD_STANDALONE=ON ..
+        else
+          echo "Visage not available, building DSP test only..."
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
+        fi
     
     - name: Build NeuroBoost
       run: |
         cd build
-        cmake --build . --config Release
+        cmake --build . --config Release --parallel 2
+    
+    - name: Run Tests
+      run: |
+        cd build
+        ctest --output-on-failure

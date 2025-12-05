@@ -8,6 +8,7 @@ A simple audio gain plugin built with [iPlug2](https://github.com/iPlug2/iPlug2)
 - Built with modern C++17
 - Cross-platform support (macOS, Windows, Linux)
 - Supports VST3 and standalone formats
+- DSP-only test executable for verifying audio processing
 
 ## Requirements
 
@@ -27,12 +28,34 @@ A simple audio gain plugin built with [iPlug2](https://github.com/iPlug2/iPlug2)
 
 **Linux:**
 - GCC 9+ or Clang 10+
-- X11 development libraries
-- ALSA development libraries
+- X11 development libraries (`libx11-dev`)
+- OpenGL development libraries (`libgl1-mesa-dev`)
+- FreeType development libraries (`libfreetype6-dev`)
+- GTK3 development libraries (`libgtk-3-dev`)
+- ALSA development libraries (`libasound2-dev`)
+
+Install on Ubuntu/Debian:
+```bash
+sudo apt-get install libx11-dev libgl1-mesa-dev libfreetype6-dev libgtk-3-dev libasound2-dev
+```
+
+## Quick Start (DSP Test)
+
+The simplest way to verify the project builds correctly is to compile the DSP test executable, which has no external dependencies:
+
+```bash
+mkdir build
+cd build
+cmake -DBUILD_DSP_TEST=ON ..
+cmake --build .
+ctest --output-on-failure
+```
+
+This builds and runs tests for the core audio processing functionality.
 
 ## Building
 
-### 1. Setup Dependencies
+### 1. Setup Dependencies (for full plugin build)
 
 First, download and build the required dependencies (iPlug2 and Visage):
 
@@ -61,25 +84,39 @@ scripts\build.bat
 ```
 
 Or using CMake directly:
+
+**DSP Test only (no dependencies):**
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DBUILD_DSP_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
+cmake --build . --config Release
+```
+
+**Full plugin build:**
+```bash
+mkdir build
+cd build
+cmake -DBUILD_DSP_TEST=ON -DBUILD_VST3=ON -DBUILD_STANDALONE=ON -DCMAKE_BUILD_TYPE=Release ..
 cmake --build . --config Release
 ```
 
 ### Build Options
 
-- `BUILD_VST3=ON/OFF` - Build VST3 plugin (default: ON)
-- `BUILD_STANDALONE=ON/OFF` - Build standalone application (default: ON)
-- `BUILD_AU=ON/OFF` - Build Audio Unit plugin, macOS only (default: OFF)
+| Option | Description | Default |
+|--------|-------------|---------|
+| `BUILD_DSP_TEST` | Build DSP test executable (no dependencies) | ON |
+| `BUILD_VST3` | Build VST3 plugin | OFF |
+| `BUILD_STANDALONE` | Build standalone application | OFF |
+| `BUILD_AU` | Build Audio Unit plugin (macOS only) | OFF |
 
 ## Output
 
 After building, you'll find the following outputs in the `build/` directory:
 
-- **VST3 Plugin:** `NeuroBoost.vst3`
-- **Standalone App:** `NeuroBoost` (or `NeuroBoost.exe` on Windows)
+- **DSP Test:** `build/bin/NeuroBoost_DSP_Test`
+- **VST3 Plugin:** `build/vst3/NeuroBoost.vst3` (or `.so` on Linux)
+- **Standalone App:** `build/bin/NeuroBoost` (or `NeuroBoost.exe` on Windows)
 
 ### Installing the VST3 Plugin
 
@@ -90,6 +127,23 @@ Copy the `.vst3` file to your VST3 plugins folder:
 - **Linux:** `~/.vst3/` or `/usr/lib/vst3/`
 
 ## Usage
+
+### DSP Test
+
+Run the DSP test with a gain percentage (0-200):
+```bash
+./build/bin/NeuroBoost_DSP_Test [gain_percent]
+```
+
+Examples:
+```bash
+./build/bin/NeuroBoost_DSP_Test 100  # Unity gain (no change)
+./build/bin/NeuroBoost_DSP_Test 50   # Half volume
+./build/bin/NeuroBoost_DSP_Test 200  # Double volume (+6dB)
+./build/bin/NeuroBoost_DSP_Test 0    # Mute
+```
+
+### Plugin
 
 1. Load the plugin in your DAW or run the standalone application
 2. Use the gain knob to adjust the input gain from 0% to 200%
@@ -102,8 +156,10 @@ Copy the `.vst3` file to your VST3 plugins folder:
 ```
 NeuroBoost/
 ├── src/
-│   ├── NeuroBoost.h      # Main plugin header
-│   └── NeuroBoost.cpp    # Plugin implementation
+│   ├── NeuroBoost.h      # Main plugin header (with UI)
+│   ├── NeuroBoost.cpp    # Plugin implementation (with UI)
+│   ├── NeuroBoostDSP.h   # DSP-only header
+│   └── NeuroBoostDSP.cpp # DSP-only implementation + test
 ├── config.h              # Plugin configuration
 ├── scripts/
 │   ├── setup_deps.sh     # Dependency setup (Unix)
@@ -112,6 +168,21 @@ NeuroBoost/
 │   └── build.bat         # Build script (Windows)
 ├── CMakeLists.txt        # CMake build configuration
 └── README.md             # This file
+```
+
+## Running Tests
+
+```bash
+cd build
+ctest --output-on-failure
+```
+
+Or run individual tests:
+```bash
+./bin/NeuroBoost_DSP_Test 100  # Test unity gain
+./bin/NeuroBoost_DSP_Test 50   # Test half gain
+./bin/NeuroBoost_DSP_Test 200  # Test double gain
+./bin/NeuroBoost_DSP_Test 0    # Test mute
 ```
 
 ## License
