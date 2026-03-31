@@ -48,17 +48,13 @@ jobs:
         cd build
         ctest --output-on-failure --build-config Release
     
-    - name: Run DSP Test manually
+    - name: Run sequencer tests manually
       shell: bash
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
-          ./build/bin/Release/NeuroBoost_DSP_Test.exe 100
-          ./build/bin/Release/NeuroBoost_DSP_Test.exe 50
-          ./build/bin/Release/NeuroBoost_DSP_Test.exe 200
+          ./build/bin/Release/test_sequencer.exe
         else
-          ./build/bin/NeuroBoost_DSP_Test 100
-          ./build/bin/NeuroBoost_DSP_Test 50
-          ./build/bin/NeuroBoost_DSP_Test 200
+          ./build/bin/test_sequencer
         fi
 
   build-full-plugin:
@@ -82,6 +78,8 @@ jobs:
         mkdir -p deps
         cd deps
         git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+        cd iPlug2
+        git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
     
     - name: Clone Visage
       run: |
