@@ -78,6 +78,8 @@ jobs:
         mkdir -p deps
         cd deps
         git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+        cd iPlug2
+        git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
     
     - name: Clone Visage
       run: |

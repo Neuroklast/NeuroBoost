@@ -354,7 +354,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         
         set(VST3_SDK_ROOT "${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK")
         
-        if(EXISTS "${VST3_SDK_ROOT}")
+        if(EXISTS "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.h")
             set(VST3_INCLUDES
                 ${VST3_SDK_ROOT}
                 ${VST3_SDK_ROOT}/base/source
