@@ -186,7 +186,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     
     # Platform-specific settings
     if(APPLE)
-        list(APPEND COMMON_DEFINITIONS OS_MAC SWELL_PROVIDED_BY_APP)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
         set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS version")
         
         # macOS frameworks
@@ -214,7 +214,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${IPLUG2_ROOT}/WDL/swell/swell-modstub-generic.cpp
         )
     elseif(WIN32)
-        list(APPEND COMMON_DEFINITIONS OS_WIN NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+        list(APPEND COMMON_DEFINITIONS NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
         
         set(PLATFORM_LIBS
             d3d11
@@ -228,7 +228,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         
         set(SWELL_SOURCES "")
     elseif(UNIX)
-        list(APPEND COMMON_DEFINITIONS OS_LINUX SWELL_PROVIDED_BY_APP)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
         
         find_package(X11 REQUIRED)
         find_package(PkgConfig REQUIRED)
