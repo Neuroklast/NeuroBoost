@@ -147,10 +147,14 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     set(IPLUG_INCLUDES
         ${IPLUG2_ROOT}
         ${IPLUG2_ROOT}/IPlug
+        ${IPLUG2_ROOT}/IPlug/APP
         ${IPLUG2_ROOT}/IPlug/Extras
         ${IPLUG2_ROOT}/WDL
         ${IPLUG2_ROOT}/WDL/swell
         ${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK
+        ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio
+        ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio/include
+        ${IPLUG2_ROOT}/Dependencies/IPlug/RTMidi
     )
     
     # Visage include directories
@@ -186,7 +190,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     
     # Platform-specific settings
     if(APPLE)
-        list(APPEND COMMON_DEFINITIONS OS_MAC SWELL_PROVIDED_BY_APP)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
         set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS version")
         
         # macOS frameworks
@@ -214,7 +218,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${IPLUG2_ROOT}/WDL/swell/swell-modstub-generic.cpp
         )
     elseif(WIN32)
-        list(APPEND COMMON_DEFINITIONS OS_WIN NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+        list(APPEND COMMON_DEFINITIONS NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
         
         set(PLATFORM_LIBS
             d3d11
@@ -228,7 +232,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         
         set(SWELL_SOURCES "")
     elseif(UNIX)
-        list(APPEND COMMON_DEFINITIONS OS_LINUX SWELL_PROVIDED_BY_APP)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
         
         find_package(X11 REQUIRED)
         find_package(PkgConfig REQUIRED)
@@ -282,29 +286,83 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     
     # Create standalone target
     if(BUILD_STANDALONE AND EXISTS "${IPLUG2_ROOT}" AND VISAGE_LIBRARY)
-        message(STATUS "Configuring standalone application...")
-        
-        set(STANDALONE_SOURCES
-            ${PLUGIN_SOURCES}
-            ${IPLUG_CORE_SOURCES}
-            ${SWELL_SOURCES}
-        )
-        
-        add_executable(NeuroBoost_Standalone ${STANDALONE_SOURCES})
-        
-        target_include_directories(NeuroBoost_Standalone PRIVATE ${COMMON_INCLUDES})
-        target_compile_definitions(NeuroBoost_Standalone PRIVATE 
-            ${COMMON_DEFINITIONS}
-            APP_API
-            IPLUG_APP
-        )
-        
-        target_link_libraries(NeuroBoost_Standalone PRIVATE ${VISAGE_LIBRARY} ${PLATFORM_LIBS})
-        
-        set_target_properties(NeuroBoost_Standalone PROPERTIES
-            OUTPUT_NAME "NeuroBoost"
-            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-        )
+        if(UNIX AND NOT APPLE)
+            # iPlug2 APP layer does not support Linux yet (see iPlug2/Scripts/cmake/APP.cmake)
+            message(STATUS "Skipping standalone build: iPlug2 APP layer does not support Linux")
+        else()
+            message(STATUS "Configuring standalone application...")
+
+            set(IPLUG_APP_SOURCES
+                ${IPLUG2_ROOT}/IPlug/APP/IPlugAPP.cpp
+                ${IPLUG2_ROOT}/IPlug/APP/IPlugAPP_dialog.cpp
+                ${IPLUG2_ROOT}/IPlug/APP/IPlugAPP_host.cpp
+                ${IPLUG2_ROOT}/IPlug/APP/IPlugAPP_main.cpp
+                ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio/RtAudio.cpp
+                ${IPLUG2_ROOT}/Dependencies/IPlug/RTMidi/RtMidi.cpp
+            )
+
+            if(APPLE)
+                set(SWELL_DIR ${IPLUG2_ROOT}/WDL/swell)
+                set(SWELL_STANDALONE_SOURCES
+                    ${SWELL_DIR}/swell-appstub.mm
+                    ${SWELL_DIR}/swellappmain.mm
+                    ${SWELL_DIR}/swell-ini.cpp
+                    ${SWELL_DIR}/swell-dlg.mm
+                    ${SWELL_DIR}/swell-kb.mm
+                    ${SWELL_DIR}/swell-miscdlg.mm
+                    ${SWELL_DIR}/swell-menu.mm
+                    ${SWELL_DIR}/swell-wnd.mm
+                    ${SWELL_DIR}/swell.cpp
+                    ${SWELL_DIR}/swell-misc.mm
+                    ${SWELL_DIR}/swell-gdi.mm
+                )
+                set(APP_AUDIO_DEFS __MACOSX_CORE__ SWELL_COMPILED)
+                set(APP_EXTRA_LIBS
+                    "-framework AppKit"
+                    "-framework Carbon"
+                    "-framework CoreMIDI"
+                    "-framework CoreAudio"
+                )
+            elseif(WIN32)
+                set(SWELL_STANDALONE_SOURCES "")
+                list(APPEND IPLUG_APP_SOURCES
+                    ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio/include/asio.cpp
+                    ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio/include/asiodrivers.cpp
+                    ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio/include/asiolist.cpp
+                    ${IPLUG2_ROOT}/Dependencies/IPlug/RTAudio/include/iasiothiscallresolver.cpp
+                )
+                set(APP_AUDIO_DEFS __WINDOWS_DS__ __WINDOWS_MM__ __WINDOWS_ASIO__)
+                set(APP_EXTRA_LIBS dsound winmm)
+            endif()
+
+            set(STANDALONE_SOURCES
+                ${PLUGIN_SOURCES}
+                ${IPLUG_CORE_SOURCES}
+                ${IPLUG_APP_SOURCES}
+                ${SWELL_STANDALONE_SOURCES}
+            )
+
+            add_executable(NeuroBoost_Standalone ${STANDALONE_SOURCES})
+
+            target_include_directories(NeuroBoost_Standalone PRIVATE ${COMMON_INCLUDES})
+            target_compile_definitions(NeuroBoost_Standalone PRIVATE
+                ${COMMON_DEFINITIONS}
+                APP_API
+                IPLUG_APP
+                ${APP_AUDIO_DEFS}
+            )
+
+            target_link_libraries(NeuroBoost_Standalone PRIVATE
+                ${VISAGE_LIBRARY}
+                ${PLATFORM_LIBS}
+                ${APP_EXTRA_LIBS}
+            )
+
+            set_target_properties(NeuroBoost_Standalone PROPERTIES
+                OUTPUT_NAME "NeuroBoost"
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+            )
+        endif()
     elseif(BUILD_STANDALONE)
         message(WARNING "Cannot build standalone: iPlug2 or Visage not available")
     endif()

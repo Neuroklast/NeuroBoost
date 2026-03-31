@@ -7,11 +7,11 @@
 
 ## Current Phase
 
-**Pre-Development / Architecture & Documentation**
+**Sprint 2 Complete – All 7 algorithms implemented, SequencerEngine integrated into plugin**
 
-The existing codebase is a gain plugin placeholder. The MIDI sequencer core
-has not yet been implemented. All architecture documentation has been created
-in this sprint. The next step is Sprint 1: implement the DSP foundation.
+The MIDI sequencer DSP foundation and all generation algorithms are complete.
+`NeuroBoost.h/cpp` has been transformed from a gain plugin to a MIDI sequencer.
+The next step is Sprint 3: full Visage UI redesign (step grid, knobs, visualizers).
 
 ---
 
@@ -32,40 +32,34 @@ in this sprint. The next step is Sprint 1: implement the DSP foundation.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `src/common/Constants.h` | Not Started | MAX_STEPS, MAX_POLYPHONY, etc. |
-| `src/common/Types.h` | Not Started | SequencerState, StepData, structs |
-| `src/common/Params.h` | Not Started | Single EParams definition |
-| `src/dsp/SequencerEngine` | Not Started | Main audio-thread loop |
-| `src/dsp/Algorithms` | Not Started | Euclidean, L-System, CA, Markov, Fractal |
-| `src/dsp/ScaleQuantizer` | Not Started | 15+ scales, lookup table |
-| `src/dsp/NoteTracker` | Not Started | ActiveNote array, panicAllNotesOff |
-| `src/dsp/TransportSync` | Not Started | PPQ tracking, beat-position math |
-| `src/dsp/LockFreeQueue` | Not Started | SPSC ring buffer |
-| `src/ui/EditorView` | Not Started | Top-level Visage Frame |
-| `src/ui/components/StepGrid` | Not Started | 64-step grid + playhead |
-| `src/ui/components/StepCell` | Not Started | Individual step cell |
-| `src/ui/components/ProbabilityBar` | Not Started | Per-step probability widget |
-| `src/ui/components/Knob` | Not Started | Reusable knob (replaces GainKnob) |
-| `src/ui/components/Selector` | Not Started | Mode / scale dropdown |
-| `src/ui/components/PianoRoll` | Not Started | Pitch editing |
-| `src/ui/components/FractalView` | Not Started | GPU fractal visualizer |
-| `src/ui/theme/Theme.h` | Not Started | Colors, fonts, spacing |
-| DSP test suite | Partial | Gain tests pass; sequencer tests needed |
-| MIDI output | Not Started | |
-| Host sync (PPQ) | Not Started | |
-| Preset system | Not Started | |
-| State chunks (serialization) | Not Started | |
-| Scale quantization | Not Started | |
-| Euclidean generation mode | Not Started | |
-| L-System generation mode | Not Started | |
-| Cellular Automata mode | Not Started | |
-| Markov Chain mode | Not Started | |
-| Fractal Mapping mode | Not Started | |
-| Random Walk mode | Not Started | |
-| User Pattern mode | Not Started | |
+| `src/common/Constants.h` | ✅ Done | MAX_STEPS, MAX_POLYPHONY, MAX_LSYSTEM_LENGTH, etc. |
+| `src/common/Types.h` | ✅ Done | All enums and structs |
+| `src/dsp/SequencerEngine` | ✅ Done | All 7 modes, multi-mode, note-offs, fractal caching |
+| `src/dsp/Algorithms` | ✅ Done | Euclidean, Fibonacci, L-System, CA, Fractal, Markov, Probability |
+| `src/dsp/ScaleQuantizer` | ✅ Done | 15 scales with lookup tables |
+| `src/dsp/NoteTracker` | ✅ Done | Fixed-size ActiveNote array, panic |
+| `src/dsp/TransportSync` | ✅ Done | PPQ tracking, beat-position math |
+| `src/dsp/LockFreeQueue` | ✅ Done | SPSC ring buffer |
+| `src/NeuroBoost.h/cpp` | ✅ Done | Sequencer plugin (15 params, ProcessBlock, OnParamChange) |
+| `config.h` | ✅ Done | PLUG_TYPE=1, MIDI_IN/OUT=1, STATE_CHUNKS=1, 2025 copyright |
+| `src/ui/EditorView` | Not Started | Sprint 3 |
+| `src/ui/components/StepGrid` | Not Started | Sprint 3 |
+| DSP test suite | ✅ Done | 103 tests passing (all algorithms + engine modes) |
+| MIDI output | ✅ Done | Note-On + Note-Off via SendMidiMsg |
+| Host sync (PPQ) | ✅ Done | TransportSync |
+| Preset system | Not Started | Sprint 3 |
+| State chunks (serialization) | Not Started | Sprint 3 (config ready) |
+| Scale quantization | ✅ Done | 15 scales |
+| Euclidean generation mode | ✅ Done | |
+| Fibonacci generation mode | ✅ Done | |
+| L-System generation mode | ✅ Done | Double-buffer, no heap |
+| Cellular Automata mode | ✅ Done | Wolfram 1D, 0-255 rules |
+| Markov Chain mode | ✅ Done | 3 built-in presets (Blues, Jazz, Minimal) |
+| Fractal Mapping mode | ✅ Done | Mandelbrot, cacheable |
+| Probability mode | ✅ Done | Per-step probability, deterministic RNG |
 | CI – DSP test | ✅ Working | GitHub Actions `build.yml` |
 | CI – Full plugin build | ⚠️ Partial | `continue-on-error: true` (deps not cached) |
-| Documentation | ✅ Done | Sprint 0 complete |
+| Documentation | ✅ Done | Sprint 2 complete |
 
 ---
 
@@ -82,15 +76,41 @@ in this sprint. The next step is Sprint 1: implement the DSP foundation.
 - [x] docs/MARKET_ANALYSIS.md created
 - [x] README.md updated with Documentation section
 
-### Sprint 1 – DSP Foundation (Next)
+### Sprint 1 – DSP Foundation ✅
 
-- [ ] Create `src/common/` (Constants.h, Types.h, Params.h)
-- [ ] Implement `LockFreeQueue.h` (SPSC ring buffer)
-- [ ] Implement `NoteTracker.h`
-- [ ] Implement `TransportSync.h`
-- [ ] Implement `SequencerEngine` skeleton (ProcessBlock, transport detection)
-- [ ] Add DSP tests for NoteTracker and TransportSync
-- [ ] Fix all Known Issues from the gain plugin (see below)
+- [x] Create `src/common/` (Constants.h, Types.h)
+- [x] Implement `LockFreeQueue.h` (SPSC ring buffer)
+- [x] Implement `NoteTracker.h`
+- [x] Implement `TransportSync.h`
+- [x] Implement `SequencerEngine` with Euclidean mode
+- [x] Add DSP tests for all Sprint 1 components
+
+### Sprint 2 – Remaining Algorithms, Plugin Integration, config.h Migration ✅
+
+- [x] A1: Fibonacci rhythm generator
+- [x] A2: L-System pattern generator (char[MAX_LSYSTEM_LENGTH], double-buffer)
+- [x] A3: Cellular Automata (Wolfram 1D, rule 0-255)
+- [x] A4: Fractal mapping (Mandelbrot, cacheable)
+- [x] A5: Markov chain + 3 constexpr presets (Blues, Jazz, Minimal)
+- [x] A6: Probability / weighted random
+- [x] B1: config.h updated (PLUG_TYPE=1, MIDI_IN/OUT=1, STATE_CHUNKS=1, 2025 copyright)
+- [x] B2: NeuroBoost.h – new EParams (15 params), SequencerEngine member, LockFreeQueue
+- [x] B3: NeuroBoost.cpp – ProcessBlock (MIDI out), OnParamChange, OnIdle, OnReset
+- [x] B4: SequencerEngine – setGenerationMode, regeneratePattern, all modes
+- [x] B5: Note-Off output (getNoteOffNotes, getNoteOffCount)
+- [x] C1: Algorithm tests (Fibonacci, L-System, CA, Fractal, Markov, Probability)
+- [x] C2: Engine tests (multi-mode, note-offs, stepCount=1, regeneratePattern)
+- [x] D1-D3: Docs updated
+
+### Sprint 3 – Full Visage UI Redesign (Next)
+
+- [ ] Step grid component (64 cells, playhead, click to toggle)
+- [ ] Mode selector dropdown
+- [ ] Scale/root note selector
+- [ ] Per-mode parameter panel (Euclidean hits/rotation, Fractal params, etc.)
+- [ ] Playhead animation via LockFreeQueue
+- [ ] Fractal visualizer
+- [ ] Preset system UI
 
 ---
 
@@ -155,6 +175,17 @@ in this sprint. The next step is Sprint 1: implement the DSP foundation.
 - Known issues introduced: ...
 ```
 
+### [2026-03-31] – Sprint 2: Algorithms, Plugin Integration, config.h Migration
+- What changed: Added 6 new generation algorithms; integrated SequencerEngine
+  into NeuroBoost plugin; updated config.h for MIDI sequencer; 103 tests pass.
+- Files modified: src/dsp/Algorithms.h, src/dsp/Algorithms.cpp,
+  src/dsp/SequencerEngine.h, src/dsp/SequencerEngine.cpp,
+  src/NeuroBoost.h, src/NeuroBoost.cpp, config.h,
+  tests/test_sequencer.cpp, docs/STATUS.md, docs/LESSONS_LEARNED.md, README.md
+- Tests updated: 103 tests passing (up from 30); new sections: Fibonacci,
+  LSystem, CellularAutomata, Fractal, Markov, Probability, multi-mode engine
+- Known issues introduced: see below
+
 ### [2025-03-31] – Sprint 0: Architecture & Documentation
 - What changed: Created complete documentation suite for MIDI sequencer transition
 - Files modified: docs/ARCHITECTURE.md, docs/AGENTS.md, docs/STATUS.md,
@@ -173,13 +204,13 @@ in this sprint. The next step is Sprint 1: implement the DSP foundation.
 
 | # | Severity | Issue | File | Status |
 |---|----------|-------|------|--------|
-| 1 | 🔴 High | `SendParameterValueFromUI` passes raw gain value instead of normalized (0–1) | `src/NeuroBoost.cpp:163` | Open |
-| 2 | 🔴 High | No parameter smoothing in ProcessBlock → zipper noise on automation | `src/NeuroBoost.cpp:208` | Open |
-| 3 | 🟡 Med | `OnIdle()` is empty → host automation changes don't sync to UI knob | `src/NeuroBoost.cpp:114` | Open |
-| 4 | 🟡 Med | `EParams` enum defined in both `NeuroBoost.h` and `NeuroBoostDSP.h` → ODR violation risk | both | Open |
-| 5 | 🟢 Low | `config.h` copyright says 2024, should be 2025 | `config.h:9` | Open |
+| 1 | 🔴 High | `SendParameterValueFromUI` passes raw gain value instead of normalized (0–1) | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 2) |
+| 2 | 🔴 High | No parameter smoothing in ProcessBlock → zipper noise on automation | `src/NeuroBoost.cpp` | N/A (MIDI sequencer, no audio processing) |
+| 3 | 🟡 Med | `OnIdle()` is empty → host automation changes don't sync to UI knob | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 2) |
+| 4 | 🟡 Med | `EParams` enum defined in both `NeuroBoost.h` and `NeuroBoostDSP.h` → ODR violation risk | both | Open (NeuroBoostDSP.h kept for legacy DSP tests) |
+| 5 | 🟢 Low | `config.h` copyright says 2024, should be 2025 | `config.h:9` | ✅ Fixed (Sprint 2) |
 | 6 | 🟢 Low | README references LICENSE file which does not exist | `README.md` | Open |
-| 7 | 🟡 Med | `std::ostringstream` used in draw callback (heap allocation in UI frame) | `src/NeuroBoost.cpp` | Open |
-| 8 | 🟡 Med | `visage::Font` created every frame in draw callback | `src/NeuroBoost.cpp` | Open |
+| 7 | 🟡 Med | `std::ostringstream` used in draw callback (heap allocation in UI frame) | `src/NeuroBoost.cpp` | Open (Sprint 3 UI redesign) |
+| 8 | 🟡 Med | `visage::Font` created every frame in draw callback | `src/NeuroBoost.cpp` | Open (Sprint 3 UI redesign) |
 | 9 | 🟢 Low | CI full-plugin build has `continue-on-error: true` → silent failures | `.github/workflows/build.yml` | Open |
 | 10 | 🟢 Low | Dependency pinned to `GIT_TAG master` → not reproducible | `CMakeLists.txt` | Open |

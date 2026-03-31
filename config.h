@@ -6,7 +6,7 @@
 #define PLUG_MFR_ID 'Nklt'
 #define PLUG_URL_STR "https://github.com/Neuroklast/NeuroBoost"
 #define PLUG_EMAIL_STR "contact@neuroklast.com"
-#define PLUG_COPYRIGHT_STR "Copyright 2024 Neuroklast"
+#define PLUG_COPYRIGHT_STR "Copyright 2025 Neuroklast"
 #define PLUG_CLASS_NAME NeuroBoost
 
 #define BUNDLE_NAME "NeuroBoost"
@@ -18,18 +18,18 @@
 #define PLUG_CHANNEL_IO "1-1 2-2"
 
 #define PLUG_LATENCY 0
-#define PLUG_TYPE 0
-#define PLUG_DOES_MIDI_IN 0
-#define PLUG_DOES_MIDI_OUT 0
+#define PLUG_TYPE 1
+#define PLUG_DOES_MIDI_IN 1
+#define PLUG_DOES_MIDI_OUT 1
 #define PLUG_DOES_MPE 0
-#define PLUG_DOES_STATE_CHUNKS 0
+#define PLUG_DOES_STATE_CHUNKS 1
 #define PLUG_HAS_UI 1
-#define PLUG_WIDTH 400
-#define PLUG_HEIGHT 300
-#define PLUG_MIN_WIDTH 200
-#define PLUG_MIN_HEIGHT 150
-#define PLUG_MAX_WIDTH 800
-#define PLUG_MAX_HEIGHT 600
+#define PLUG_WIDTH 900
+#define PLUG_HEIGHT 600
+#define PLUG_MIN_WIDTH 600
+#define PLUG_MIN_HEIGHT 400
+#define PLUG_MAX_WIDTH 1920
+#define PLUG_MAX_HEIGHT 1080
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 1
@@ -47,12 +47,12 @@
 #define AAX_PLUG_CATEGORY_STR "Effect"
 #define AAX_DOES_AUDIOSUITE 1
 
-#define VST3_SUBCATEGORY "Fx"
+#define VST3_SUBCATEGORY "Instrument|Generator"
 
 #define CLAP_MANUAL_URL "https://github.com/Neuroklast/NeuroBoost/wiki"
 #define CLAP_SUPPORT_URL "https://github.com/Neuroklast/NeuroBoost/issues"
-#define CLAP_DESCRIPTION "A simple audio effect for modifying gain"
-#define CLAP_FEATURES "audio-effect"
+#define CLAP_DESCRIPTION "Deterministic and probabilistic MIDI sequencer with fractal math"
+#define CLAP_FEATURES "note-effect"
 
 #define APP_NUM_CHANNELS 2
 #define APP_N_VECTOR_WAIT 0

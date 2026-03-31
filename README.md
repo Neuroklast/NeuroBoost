@@ -2,7 +2,7 @@
 
 A deterministic & probabilistic MIDI sequencer plugin built with [iPlug2](https://github.com/iPlug2/iPlug2) and [Visage](https://github.com/VitalAudio/visage) UI library.
 
-> **Status (Sprint 1):** DSP foundation complete. The plugin is transitioning from a simple gain plugin into a full deterministic/probabilistic MIDI sequencer. The sequencer DSP engine (`src/dsp/`, `src/common/`) is implemented and tested standalone; UI integration is planned for Sprint 2.
+> **Status (Sprint 2):** All 7 generation algorithms implemented and tested. Plugin fully integrated as a MIDI sequencer (MIDI out, 15 parameters, host transport sync). Sprint 3 will bring the full Visage UI redesign (step grid, knobs, visualizers).
 
 ## Documentation
 
@@ -16,11 +16,18 @@ A deterministic & probabilistic MIDI sequencer plugin built with [iPlug2](https:
 
 ## Features
 
-- Simple gain control with a single knob
+- **7 generation algorithms**: Euclidean (Bjorklund), Fibonacci, L-System, Cellular Automata (Wolfram 1D), Markov Chain, Fractal (Mandelbrot), Probability
+- **15 sequencer parameters**: step count, generation mode, root note, scale, density, swing, Euclidean hits/rotation, fractal params, Markov presets, velocity, octave range
+- **3 built-in Markov presets**: Blues, Jazz, Minimal (constexpr matrices, no file I/O)
+- **Realtime-safe DSP**: no heap allocations, no mutex, no exceptions in audio thread
+- **Deterministic output**: same seed → same sequence every run (mt19937 RNG)
+- **Full MIDI output**: sample-accurate Note-On and Note-Off with iPlug2
+- **Host transport sync**: PPQ-based beat tracking, loop detection
+- **Scale quantization**: 15 scales with lookup tables
 - Built with modern C++17
 - Cross-platform support (macOS, Windows, Linux)
 - Supports VST3 and standalone formats
-- DSP-only test executable for verifying audio processing
+- 103 standalone DSP tests (no iPlug2/Visage dependency)
 
 ## Requirements
 

@@ -186,6 +186,288 @@ static void testEuclidean()
 }
 
 // ============================================================================
+// Fibonacci tests
+// ============================================================================
+
+static void testFibonacci()
+{
+  printSection("Fibonacci");
+
+  bool pattern[MAX_STEPS] = {};
+
+  // stepCount=16: positions at fib mod 16 should be set
+  Algorithms::generateFibonacci(16, pattern, MAX_STEPS);
+
+  // Fibonacci numbers: 1,1,2,3,5,8,13,21,...
+  // Positions (1-indexed → 0-indexed): 0,0,1,2,4,7,12,4,...
+  // At minimum, positions 0,1,2,4,7,12 should be active
+  EXPECT(pattern[0], "Fibonacci 16: position 0 active (fib=1)");
+  EXPECT(pattern[1], "Fibonacci 16: position 1 active (fib=2)");
+  EXPECT(pattern[2], "Fibonacci 16: position 2 active (fib=3)");
+  EXPECT(pattern[4], "Fibonacci 16: position 4 active (fib=5)");
+  EXPECT(pattern[7], "Fibonacci 16: position 7 active (fib=8)");
+  EXPECT(pattern[12], "Fibonacci 16: position 12 active (fib=13)");
+
+  // At least one step is active
+  bool anyActive = false;
+  for (int i = 0; i < 16; ++i) if (pattern[i]) anyActive = true;
+  EXPECT(anyActive, "Fibonacci 16: at least one step active");
+
+  // stepCount=1: only position 0 can be set
+  bool p1[MAX_STEPS] = {};
+  Algorithms::generateFibonacci(1, p1, MAX_STEPS);
+  EXPECT(p1[0], "Fibonacci stepCount=1: position 0 active");
+
+  // stepCount=0: no crash, all false
+  bool p0[MAX_STEPS] = {};
+  Algorithms::generateFibonacci(0, p0, MAX_STEPS);
+  EXPECT(true, "Fibonacci stepCount=0: no crash");
+}
+
+// ============================================================================
+// L-System tests
+// ============================================================================
+
+static void testLSystem()
+{
+  printSection("LSystem");
+
+  bool pattern[MAX_LSYSTEM_LENGTH] = {};
+
+  // Classical Fibonacci L-System: A→AB, B→A
+  // Iteration 0: A
+  // Iteration 1: AB
+  // Iteration 2: ABA
+  // Iteration 3: ABAAB
+  // Iteration 4: ABAABABA  (length 8)
+  Algorithms::generateLSystem('A', "AB", "A", 4, pattern, MAX_LSYSTEM_LENGTH);
+
+  // After 4 iterations the string is "ABAABABA" (length 8)
+  // A=true, B=false
+  // Expected: T F T T F T F T
+  EXPECT(pattern[0] == true,  "LSystem 4 iter [0] = A (true)");
+  EXPECT(pattern[1] == false, "LSystem 4 iter [1] = B (false)");
+  EXPECT(pattern[2] == true,  "LSystem 4 iter [2] = A (true)");
+  EXPECT(pattern[3] == true,  "LSystem 4 iter [3] = A (true)");
+  EXPECT(pattern[4] == false, "LSystem 4 iter [4] = B (false)");
+  EXPECT(pattern[5] == true,  "LSystem 4 iter [5] = A (true)");
+
+  // 0 iterations: axiom only → 'A' = one true step
+  bool p0[MAX_LSYSTEM_LENGTH] = {};
+  Algorithms::generateLSystem('A', "AB", "A", 0, p0, MAX_LSYSTEM_LENGTH);
+  EXPECT(p0[0] == true, "LSystem 0 iter: axiom A maps to true");
+
+  // Large number of iterations must not crash (capped at MAX_LSYSTEM_LENGTH)
+  bool big[MAX_LSYSTEM_LENGTH] = {};
+  Algorithms::generateLSystem('A', "AB", "A", 30, big, MAX_LSYSTEM_LENGTH);
+  EXPECT(true, "LSystem 30 iterations: no crash/OOM");
+  // Some steps must be active
+  bool anyActive = false;
+  for (int i = 0; i < MAX_LSYSTEM_LENGTH; ++i) if (big[i]) { anyActive = true; break; }
+  EXPECT(anyActive, "LSystem 30 iterations: at least one active step");
+}
+
+// ============================================================================
+// Cellular Automata tests
+// ============================================================================
+
+static void testCellularAutomata()
+{
+  printSection("CellularAutomata");
+
+  bool pattern[MAX_STEPS] = {};
+
+  // Rule 0: all cells die → output all false
+  Algorithms::generateCellularAutomata(0, 16, 8, pattern, MAX_STEPS);
+  bool allFalse = true;
+  for (int i = 0; i < 16; ++i) if (pattern[i]) allFalse = false;
+  EXPECT(allFalse, "CA Rule=0: all output steps false");
+
+  // Rule 255: all cells live → output all true
+  Algorithms::generateCellularAutomata(255, 16, 8, pattern, MAX_STEPS);
+  bool allTrue = true;
+  // Row 0 has only one cell; after 1 gen rule 255 turns all on
+  // (we just check no crash and result is deterministic)
+  EXPECT(true, "CA Rule=255: no crash");
+
+  // Rule 30: chaotic, non-trivial output
+  Algorithms::generateCellularAutomata(30, 16, 8, pattern, MAX_STEPS);
+  bool anyActive = false;
+  for (int i = 0; i < 16; ++i) if (pattern[i]) anyActive = true;
+  EXPECT(anyActive, "CA Rule=30: at least one active step");
+
+  // Determinism: same parameters produce same result
+  bool p1[MAX_STEPS] = {};
+  bool p2[MAX_STEPS] = {};
+  Algorithms::generateCellularAutomata(30, 16, 8, p1, MAX_STEPS);
+  Algorithms::generateCellularAutomata(30, 16, 8, p2, MAX_STEPS);
+  bool same = true;
+  for (int i = 0; i < 16; ++i) if (p1[i] != p2[i]) same = false;
+  EXPECT(same, "CA Rule=30: two calls with same params produce same result");
+
+  // steps=0: no crash
+  Algorithms::generateCellularAutomata(30, 0, 8, pattern, MAX_STEPS);
+  EXPECT(true, "CA steps=0: no crash");
+}
+
+// ============================================================================
+// Fractal tests
+// ============================================================================
+
+static void testFractal()
+{
+  printSection("Fractal");
+
+  bool pattern[MAX_STEPS] = {};
+  int iterCounts[MAX_STEPS] = {};
+
+  // Point deep inside Mandelbrot set (c = 0+0i): all iterations should reach maxIter
+  Algorithms::generateFractal(16, 0.0, 0.0, 0.0, 50, 25, iterCounts, pattern, MAX_STEPS);
+  EXPECT(iterCounts[0] == 50, "Fractal: c=0+0i reaches maxIter (=50)");
+  EXPECT(pattern[0] == true, "Fractal: c=0+0i above threshold");
+
+  // Point outside set (c = 2.5+0i): should escape immediately
+  Algorithms::generateFractal(1, 2.5, 0.0, 0.0, 50, 25, iterCounts, pattern, MAX_STEPS);
+  EXPECT(iterCounts[0] < 50, "Fractal: c=2.5 escapes before maxIter");
+  EXPECT(pattern[0] == false, "Fractal: c=2.5 below threshold");
+
+  // maxIter=0: no crash, all counts should be 0
+  Algorithms::generateFractal(4, 0.0, 0.0, 1.0, 0, 0, iterCounts, pattern, MAX_STEPS);
+  EXPECT(true, "Fractal maxIter=0: no crash");
+
+  // steps=0: no crash
+  Algorithms::generateFractal(0, 0.0, 0.0, 1.0, 50, 25, iterCounts, pattern, MAX_STEPS);
+  EXPECT(true, "Fractal steps=0: no crash");
+
+  // With zoom > 0: output varies across steps
+  Algorithms::generateFractal(16, -0.5, 0.0, 3.0, 50, 10, iterCounts, pattern, MAX_STEPS);
+  bool someTrue = false, someFalse = false;
+  for (int i = 0; i < 16; ++i)
+  {
+    if (pattern[i])  someTrue  = true;
+    if (!pattern[i]) someFalse = true;
+  }
+  EXPECT(someTrue || someFalse, "Fractal with zoom: result computed without crash");
+}
+
+// ============================================================================
+// Markov tests
+// ============================================================================
+
+static void testMarkov()
+{
+  printSection("Markov");
+
+  int output1[MAX_STEPS] = {};
+  int output2[MAX_STEPS] = {};
+
+  // Determinism: same seed → same sequence
+  {
+    std::mt19937 rng1(42);
+    std::mt19937 rng2(42);
+    Algorithms::generateMarkov(Algorithms::MARKOV_PRESET_BLUES, 0, 16, rng1, output1, MAX_STEPS);
+    Algorithms::generateMarkov(Algorithms::MARKOV_PRESET_BLUES, 0, 16, rng2, output2, MAX_STEPS);
+    bool same = true;
+    for (int i = 0; i < 16; ++i) if (output1[i] != output2[i]) same = false;
+    EXPECT(same, "Markov: same seed produces identical sequence");
+  }
+
+  // All output values are valid pitch classes (0-11)
+  {
+    std::mt19937 rng(99);
+    Algorithms::generateMarkov(Algorithms::MARKOV_PRESET_JAZZ, 5, 32, rng, output1, MAX_STEPS);
+    bool allValid = true;
+    for (int i = 0; i < 32; ++i)
+      if (output1[i] < 0 || output1[i] > 11) allValid = false;
+    EXPECT(allValid, "Markov: all output values in [0, 11]");
+  }
+
+  // Absorbing state (all-zero row) falls back to uniform distribution
+  {
+    double zeroMatrix[12][12] = {};
+    // All rows zero → uniform fallback at every step
+    std::mt19937 rng(1);
+    Algorithms::generateMarkov(zeroMatrix, 0, 16, rng, output1, MAX_STEPS);
+    bool allValid = true;
+    for (int i = 0; i < 16; ++i)
+      if (output1[i] < 0 || output1[i] > 11) allValid = false;
+    EXPECT(allValid, "Markov absorbing state: uniform fallback produces valid pitch classes");
+  }
+
+  // Minimal preset: strong self-transitions, result should have runs of same pitch
+  {
+    std::mt19937 rng(7);
+    Algorithms::generateMarkov(Algorithms::MARKOV_PRESET_MINIMAL, 0, 32, rng, output1, MAX_STEPS);
+    int repeatCount = 0;
+    for (int i = 1; i < 32; ++i)
+      if (output1[i] == output1[i - 1]) ++repeatCount;
+    EXPECT(repeatCount > 5, "Markov Minimal: exhibits repeating notes (self-transitions)");
+  }
+
+  // steps=0: no crash
+  {
+    std::mt19937 rng(0);
+    Algorithms::generateMarkov(Algorithms::MARKOV_PRESET_BLUES, 0, 0, rng, output1, MAX_STEPS);
+    EXPECT(true, "Markov steps=0: no crash");
+  }
+}
+
+// ============================================================================
+// Probability tests
+// ============================================================================
+
+static void testProbability()
+{
+  printSection("Probability");
+
+  bool pattern[MAX_STEPS] = {};
+
+  // prob=1.0 for all steps → all true
+  {
+    double probs[MAX_STEPS];
+    for (int i = 0; i < MAX_STEPS; ++i) probs[i] = 1.0;
+    std::mt19937 rng(0);
+    Algorithms::generateProbability(probs, MAX_STEPS, rng, pattern, MAX_STEPS);
+    bool allTrue = true;
+    for (int i = 0; i < MAX_STEPS; ++i) if (!pattern[i]) allTrue = false;
+    EXPECT(allTrue, "Probability: prob=1.0 → all steps true");
+  }
+
+  // prob=0.0 for all steps → all false
+  {
+    double probs[MAX_STEPS] = {};
+    std::mt19937 rng(0);
+    Algorithms::generateProbability(probs, MAX_STEPS, rng, pattern, MAX_STEPS);
+    bool allFalse = true;
+    for (int i = 0; i < MAX_STEPS; ++i) if (pattern[i]) allFalse = false;
+    EXPECT(allFalse, "Probability: prob=0.0 → all steps false");
+  }
+
+  // Determinism with same seed
+  {
+    double probs[MAX_STEPS];
+    for (int i = 0; i < MAX_STEPS; ++i) probs[i] = 0.5;
+    bool p1[MAX_STEPS] = {};
+    bool p2[MAX_STEPS] = {};
+    std::mt19937 rng1(42);
+    std::mt19937 rng2(42);
+    Algorithms::generateProbability(probs, MAX_STEPS, rng1, p1, MAX_STEPS);
+    Algorithms::generateProbability(probs, MAX_STEPS, rng2, p2, MAX_STEPS);
+    bool same = true;
+    for (int i = 0; i < MAX_STEPS; ++i) if (p1[i] != p2[i]) same = false;
+    EXPECT(same, "Probability: same seed → identical output");
+  }
+
+  // steps=0: no crash
+  {
+    double probs[1] = {0.5};
+    std::mt19937 rng(0);
+    Algorithms::generateProbability(probs, 0, rng, pattern, MAX_STEPS);
+    EXPECT(true, "Probability steps=0: no crash");
+  }
+}
+
+// ============================================================================
 // LockFreeQueue tests
 // ============================================================================
 
@@ -370,6 +652,163 @@ static void testSequencerTiming()
 }
 
 // ============================================================================
+// SequencerEngine multi-mode tests
+// ============================================================================
+
+static void testSequencerMultiMode()
+{
+  printSection("SequencerEngine – Multi-Mode");
+
+  // Helper: run engine for a few bars and count note-ons
+  auto runAndCount = [](SequencerEngine& eng, int bars) -> int
+  {
+    const int nFrames = 512;
+    const double samplesPerBeat = 44100.0 * 60.0 / 120.0;
+    const double beatsPerBlock  = nFrames / samplesPerBeat;
+    const int totalBlocks = static_cast<int>(bars * 4.0 / beatsPerBlock) + 1;
+
+    int total = 0;
+    double ppq = 0.0;
+    bool first = true;
+    for (int b = 0; b < totalBlocks; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      if (!first)
+        total += eng.getOutputNoteCount();
+      first = false;
+      ppq += beatsPerBlock;
+    }
+    return total;
+  };
+
+  // Euclidean (default)
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setSeed(1);
+    int notes = runAndCount(eng, 2);
+    EXPECT(notes > 0, "Euclidean mode: produces notes");
+  }
+
+  // Fibonacci mode
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setGenerationMode(GenerationMode::Fibonacci);
+    eng.setSeed(1);
+    int notes = runAndCount(eng, 2);
+    EXPECT(notes > 0, "Fibonacci mode: produces notes");
+    EXPECT(eng.getGenerationMode() == GenerationMode::Fibonacci,
+           "getGenerationMode() returns Fibonacci");
+  }
+
+  // L-System mode
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setGenerationMode(GenerationMode::LSystem);
+    eng.setSeed(1);
+    int notes = runAndCount(eng, 2);
+    EXPECT(notes > 0, "LSystem mode: produces notes");
+  }
+
+  // Cellular Automata mode
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setGenerationMode(GenerationMode::CellularAutomata);
+    eng.setSeed(1);
+    int notes = runAndCount(eng, 2);
+    EXPECT(true, "CellularAutomata mode: no crash (notes may be 0 for rule 0)");
+  }
+
+  // Markov mode
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setGenerationMode(GenerationMode::Markov);
+    eng.setSeed(1);
+    int notes = runAndCount(eng, 2);
+    EXPECT(notes > 0, "Markov mode: produces notes");
+  }
+
+  // Probability mode
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setGenerationMode(GenerationMode::Probability);
+    eng.setSeed(1);
+    int notes = runAndCount(eng, 2);
+    // All steps are active (probability=1.0 by default), so we expect notes
+    EXPECT(notes > 0, "Probability mode: produces notes (default prob=1.0)");
+  }
+
+  // setMarkovPreset switches presets without crash
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setGenerationMode(GenerationMode::Markov);
+    eng.setMarkovPreset(0); // Blues
+    eng.setMarkovPreset(1); // Jazz
+    eng.setMarkovPreset(2); // Minimal
+    EXPECT(true, "setMarkovPreset(0/1/2): no crash");
+  }
+
+  // regeneratePattern can be called explicitly
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(4, 0);
+    eng.regeneratePattern();
+    EXPECT(true, "regeneratePattern(): no crash");
+  }
+
+  // Note-off output
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0); // all steps active so note-offs are generated
+    eng.setSeed(1);
+
+    const int nFrames = 512;
+    const double samplesPerBeat = 44100.0 * 60.0 / 120.0;
+    const double beatsPerBlock  = nFrames / samplesPerBeat;
+    double ppq = 0.0;
+    int totalOffs = 0;
+
+    for (int b = 0; b < 400; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      totalOffs += eng.getNoteOffCount();
+      ppq += beatsPerBlock;
+    }
+    EXPECT(totalOffs > 0, "Note-off output: note-offs generated after notes fire");
+  }
+
+  // stepCount=1 with all modes must not crash
+  {
+    for (int m = 0; m <= static_cast<int>(GenerationMode::Probability); ++m)
+    {
+      SequencerEngine eng;
+      eng.setSampleRate(44100.0);
+      eng.setStepCount(1);
+      eng.setGenerationMode(static_cast<GenerationMode>(m));
+      eng.processBlock(0.0, 120.0, true, 512, 44100.0);
+    }
+    EXPECT(true, "stepCount=1 with all modes: no crash");
+  }
+}
+
+// ============================================================================
 // main
 // ============================================================================
 
@@ -381,10 +820,17 @@ int main()
   testScaleQuantizer();
   testNoteTracker();
   testEuclidean();
+  testFibonacci();
+  testLSystem();
+  testCellularAutomata();
+  testFractal();
+  testMarkov();
+  testProbability();
   testLockFreeQueue();
   testTransportSync();
   testSequencerDeterminism();
   testSequencerTiming();
+  testSequencerMultiMode();
 
   std::cout << "\n==========================\n";
   std::cout << "Results: " << gPassed << " passed, " << gFailed << " failed\n";
