@@ -8,8 +8,9 @@
 #include "dsp/SequencerEngine.h"
 #include "dsp/LockFreeQueue.h"
 #include "ui/EditorView.h"
+#include "common/Presets.h"
 
-const int kNumPresets = 1;
+const int kNumPresets = kNumFactoryPresets;
 
 enum EParams
 {
@@ -39,6 +40,9 @@ public:
   void OnIdle() override;
   void OnReset() override;
   void OnParamChange(int paramIdx) override;
+
+  bool SerializeState(iplug::IByteChunk& chunk) const override;
+  int  UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
 
   void* OpenWindow(void* pParent) override;
   void CloseWindow() override;

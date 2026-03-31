@@ -55,6 +55,12 @@ public:
 private:
   std::function<double(int)>       mGetParam;
   std::function<void(int, double)> mSetParam;
+  std::function<void(int, bool)>   mOnStepActiveChanged;
+
+public:
+  void setOnStepActiveChanged(std::function<void(int, bool)> cb) { mOnStepActiveChanged = std::move(cb); }
+
+private:
 
   // Header widgets
   std::unique_ptr<ModeSelector> mGenModeSelector;

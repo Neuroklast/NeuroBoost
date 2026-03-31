@@ -32,6 +32,12 @@ SequencerEngine::SequencerEngine()
   , mLSystemIterations(4)
   , mCARule(30)
   , mCAIterations(16)
+  , mSwing(0.0)
+  , mMutationRate(0.0)
+  , mVelocityCurve(1.0)
+  , mOctaveLow(3)
+  , mOctaveHigh(5)
+  , mCycleCount(0)
   , mOutputNoteCount(0)
   , mNoteOffCount(0)
   , mRng(12345)
@@ -214,6 +220,7 @@ void SequencerEngine::reset()
   mCurrentBeat     = 0.0;
   mOutputNoteCount = 0;
   mNoteOffCount    = 0;
+  mCycleCount      = 0;
   mNoteTracker.reset();
   mRng.seed(static_cast<std::mt19937::result_type>(mSeed));
 }
@@ -267,6 +274,20 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
 
     mCurrentBeat += sDur;
     mCurrentStep  = (mCurrentStep + 1) % mStepCount;
+
+    if (mCurrentStep == 0)
+    {
+      ++mCycleCount;
+      if (mMutationRate > 0.0)
+      {
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        if (dist(mRng) < mMutationRate)
+        {
+          mSeed = mRng();
+          regeneratePattern();
+        }
+      }
+    }
   }
 }
 
@@ -278,6 +299,24 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
   const SequenceStep& step = mSteps[stepIndex];
   if (!step.active)
     return;
+
+  // Condition gate
+  if (step.conditionMode == ConditionMode::EveryN)
+  {
+    int n = step.conditionParam < 1 ? 1 : step.conditionParam;
+    if (mCycleCount % n != 0)
+      return;
+  }
+  else if (step.conditionMode == ConditionMode::Fill)
+  {
+    if (mGlobalDensity < 0.8)
+      return;
+  }
+  else if (step.conditionMode == ConditionMode::PreFill)
+  {
+    if (mGlobalDensity >= 0.8)
+      return;
+  }
 
   // Probability gate
   double effectiveProbability = step.probability * mGlobalDensity;
@@ -300,33 +339,156 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
 
   int pitch = ScaleQuantizer::quantize(basePitch, mRootNote, mScaleMode);
 
+  // Octave range clamping
+  int octaveLow  = mOctaveLow  * 12;
+  int octaveHigh = (mOctaveHigh + 1) * 12 - 1;
+  if (pitch < octaveLow)  pitch = octaveLow;
+  if (pitch > octaveHigh) pitch = octaveHigh;
+  if (pitch < 0)   pitch = 0;
+  if (pitch > 127) pitch = 127;
+
   // Velocity with optional random range
-  double vel = step.velocity;
+  double baseVel = step.velocity;
   if (step.velocityRange > 0.0)
   {
     std::uniform_real_distribution<double> vDist(-step.velocityRange * 0.5,
-                                                  step.velocityRange * 0.5);
-    vel += vDist(mRng);
+                                                   step.velocityRange * 0.5);
+    baseVel += vDist(mRng);
   }
-  if (vel < 1.0)   vel = 1.0;
-  if (vel > 127.0) vel = 127.0;
+  if (baseVel < 1.0)   baseVel = 1.0;
+  if (baseVel > 127.0) baseVel = 127.0;
 
-  int sampleOffset = mTransport.beatToSampleOffset(stepBeat + step.microTiming);
-  if (sampleOffset < 0)        sampleOffset = 0;
-  if (sampleOffset >= nFrames) sampleOffset = nFrames - 1;
+  // Velocity curve
+  if (mVelocityCurve != 1.0)
+    baseVel = 127.0 * std::pow(baseVel / 127.0, mVelocityCurve);
 
-  double noteOffBeat = stepBeat + step.durationBeats;
-  mNoteTracker.noteOn(pitch, 1, noteOffBeat);
+  // Ratchets
+  int ratchetCount = step.ratchetCount;
+  if (ratchetCount < 1) ratchetCount = 1;
+  if (ratchetCount > 8) ratchetCount = 8;
 
-  if (mOutputNoteCount < MAX_POLYPHONY)
+  const double sDur        = stepDuration();
+  const double ratchetDur  = sDur / static_cast<double>(ratchetCount);
+  const double swingOffset = (stepIndex % 2 == 1) ? mSwing * sDur : 0.0;
+
+  for (int r = 0; r < ratchetCount && mOutputNoteCount < MAX_POLYPHONY; ++r)
   {
+    double ratchetBeat = stepBeat + swingOffset + r * ratchetDur;
+
+    double ratchetVel = baseVel * std::pow(step.ratchetDecay, static_cast<double>(r));
+    if (ratchetVel < 1.0)   ratchetVel = 1.0;
+    if (ratchetVel > 127.0) ratchetVel = 127.0;
+
+    int sampleOffset = mTransport.beatToSampleOffset(ratchetBeat + step.microTiming);
+    if (sampleOffset < 0)        sampleOffset = 0;
+    if (sampleOffset >= nFrames) sampleOffset = nFrames - 1;
+
+    double ratchetNoteDur = step.durationBeats / static_cast<double>(ratchetCount);
+    mNoteTracker.noteOn(pitch, 1, ratchetBeat + ratchetNoteDur);
+
     MidiNote& note     = mOutputNotes[mOutputNoteCount++];
     note.pitch         = pitch;
-    note.velocity      = static_cast<int>(vel);
+    note.velocity      = static_cast<int>(ratchetVel);
     note.channel       = 1;
-    note.startBeat     = stepBeat;
-    note.durationBeats = step.durationBeats;
+    note.startBeat     = ratchetBeat;
+    note.durationBeats = ratchetNoteDur;
     note.sampleOffset  = sampleOffset;
   }
 }
 
+
+// ----------------------------------------------------------------------------
+// New Sprint 4 methods
+// ----------------------------------------------------------------------------
+
+void SequencerEngine::setStep(int index, const SequenceStep& step)
+{
+  if (index < 0 || index >= MAX_STEPS) return;
+  mSteps[index] = step;
+}
+
+void SequencerEngine::setMarkovMatrix(const double matrix[12][12])
+{
+  for (int r = 0; r < 12; ++r)
+    for (int c = 0; c < 12; ++c)
+      mMarkovMatrix[r][c] = matrix[r][c];
+}
+
+void SequencerEngine::setSwing(double swing)
+{
+  if (swing < 0.0) swing = 0.0;
+  if (swing > 0.5) swing = 0.5;
+  mSwing = swing;
+}
+
+void SequencerEngine::setMutationRate(double rate)
+{
+  if (rate < 0.0) rate = 0.0;
+  if (rate > 1.0) rate = 1.0;
+  mMutationRate = rate;
+}
+
+void SequencerEngine::setVelocityCurve(double curve)
+{
+  if (curve < 0.1) curve = 0.1;
+  if (curve > 4.0) curve = 4.0;
+  mVelocityCurve = curve;
+}
+
+void SequencerEngine::setOctaveRange(int low, int high)
+{
+  if (low < 0)  low = 0;
+  if (high > 8) high = 8;
+  if (low > high) low = high;
+  mOctaveLow  = low;
+  mOctaveHigh = high;
+}
+
+void SequencerEngine::setStepPitch(int index, int pitch)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].pitch = pitch; }
+
+void SequencerEngine::setStepVelocity(int index, double velocity)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].velocity = velocity; }
+
+void SequencerEngine::setStepProbability(int index, double probability)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].probability = probability; }
+
+void SequencerEngine::setStepDuration(int index, double durationBeats)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].durationBeats = durationBeats; }
+
+void SequencerEngine::setStepRatchet(int index, int count, double decay)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].ratchetCount = count; mSteps[index].ratchetDecay = decay; }
+
+void SequencerEngine::setStepCondition(int index, ConditionMode mode, int param)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].conditionMode = mode; mSteps[index].conditionParam = param; }
+
+void SequencerEngine::setStepMicroTiming(int index, double offset)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].microTiming = offset; }
+
+void SequencerEngine::setStepActive(int index, bool active)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].active = active; }
+
+void SequencerEngine::setStepAccent(int index, bool accent)
+{ if (index < 0 || index >= MAX_STEPS) return; mSteps[index].accent = accent; }
+
+void SequencerEngine::loadPreset(const PresetData& preset)
+{
+  setStepCount(preset.stepCount);
+  setGenerationMode(preset.mode);
+  setScale(preset.scale, preset.rootNote);
+  setGlobalDensity(preset.density);
+  setSwing(preset.swing);
+  if (preset.mode == GenerationMode::Euclidean)
+    setEuclideanParams(preset.euclideanHits, preset.euclideanRotation);
+  if (preset.mode == GenerationMode::CellularAutomata)
+  {
+    mCARule       = preset.caRule;
+    mCAIterations = preset.caIterations;
+  }
+  if (preset.mode == GenerationMode::Fractal)
+    setFractalParams(preset.fractalCx, preset.fractalCy, preset.fractalZoom,
+                     preset.fractalMaxIter, preset.fractalThreshold);
+  if (preset.mode == GenerationMode::Markov)
+    setMarkovPreset(preset.markovPreset);
+  regeneratePattern();
+}
