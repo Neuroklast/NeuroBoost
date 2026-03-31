@@ -1,6 +1,16 @@
 # NeuroBoost
 
-A simple audio gain plugin built with [iPlug2](https://github.com/iPlug2/iPlug2) and [Visage](https://github.com/VitalAudio/visage) UI library.
+A deterministic & probabilistic MIDI sequencer plugin built with [iPlug2](https://github.com/iPlug2/iPlug2) and [Visage](https://github.com/VitalAudio/visage) UI library.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) - Technical architecture and design decisions
+- [Development Workflow](docs/DEVELOPMENT_WORKFLOW.md) - Mandatory workflow for every session
+- [Agent Instructions](docs/AGENTS.md) - Instructions for AI coding agents
+- [Project Status](docs/STATUS.md) - Current development status and checklists
+- [Lessons Learned](docs/LESSONS_LEARNED.md) - Living document of lessons learned
+- [UI/UX Specification](docs/UI_UX_SPEC.md) - UI layout, interactions, and visual design
+- [Market Analysis](docs/MARKET_ANALYSIS.md) - Competitive landscape and unique value
 
 ## Features
 
