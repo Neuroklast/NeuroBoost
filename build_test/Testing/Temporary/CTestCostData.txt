@@ -1,5 +1,0 @@
-DSP_Test_Unity_Gain 1 0.0025314
-DSP_Test_Half_Gain 1 0.00197443
-DSP_Test_Double_Gain 1 0.00181755
-DSP_Test_Mute 1 0.00208279
----
