@@ -49,6 +49,35 @@ if(BUILD_DSP_TEST)
         OUTPUT_NAME "NeuroBoost_DSP_Test"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
+
+    # -----------------------------------------------------------------------
+    # Sequencer test executable (no iPlug2 / Visage dependency)
+    # -----------------------------------------------------------------------
+    add_executable(test_sequencer
+        ${CMAKE_SOURCE_DIR}/tests/test_sequencer.cpp
+        ${CMAKE_SOURCE_DIR}/src/dsp/SequencerEngine.cpp
+        ${CMAKE_SOURCE_DIR}/src/dsp/Algorithms.cpp
+    )
+
+    target_include_directories(test_sequencer PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/common
+        ${CMAKE_SOURCE_DIR}/src/dsp
+    )
+
+    target_compile_definitions(test_sequencer PRIVATE
+        _USE_MATH_DEFINES
+    )
+
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(test_sequencer PRIVATE m)
+    endif()
+
+    set_target_properties(test_sequencer PROPERTIES
+        OUTPUT_NAME "test_sequencer"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
     
     # Enable testing
     enable_testing()
@@ -62,6 +91,10 @@ if(BUILD_DSP_TEST)
              COMMAND NeuroBoost_DSP_Test 200)
     add_test(NAME DSP_Test_Mute 
              COMMAND NeuroBoost_DSP_Test 0)
+
+    # Sequencer tests
+    add_test(NAME Sequencer_Tests
+             COMMAND test_sequencer)
 endif()
 
 # ============================================================================
