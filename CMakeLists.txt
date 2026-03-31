@@ -124,6 +124,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         ${IPLUG2_ROOT}/IPlug
         ${IPLUG2_ROOT}/IPlug/APP
         ${IPLUG2_ROOT}/IPlug/Extras
+        ${IPLUG2_ROOT}/IPlug/VST3
         ${IPLUG2_ROOT}/WDL
         ${IPLUG2_ROOT}/WDL/swell
         ${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK
