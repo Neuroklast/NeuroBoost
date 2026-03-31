@@ -2,6 +2,8 @@
 
 A deterministic & probabilistic MIDI sequencer plugin built with [iPlug2](https://github.com/iPlug2/iPlug2) and [Visage](https://github.com/VitalAudio/visage) UI library.
 
+> **Status (Sprint 1):** DSP foundation complete. The plugin is transitioning from a simple gain plugin into a full deterministic/probabilistic MIDI sequencer. The sequencer DSP engine (`src/dsp/`, `src/common/`) is implemented and tested standalone; UI integration is planned for Sprint 2.
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) - Technical architecture and design decisions
