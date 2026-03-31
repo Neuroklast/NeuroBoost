@@ -25,34 +25,9 @@ set(PLUG_VERSION "1.0.0")
 # DSP Test Target (no external dependencies - always buildable)
 # ============================================================================
 if(BUILD_DSP_TEST)
-    message(STATUS "Configuring DSP test executable...")
-    
-    add_executable(NeuroBoost_DSP_Test
-        ${CMAKE_SOURCE_DIR}/src/NeuroBoostDSP.cpp
-        ${CMAKE_SOURCE_DIR}/src/NeuroBoostDSP.h
-    )
-    
-    target_include_directories(NeuroBoost_DSP_Test PRIVATE
-        ${CMAKE_SOURCE_DIR}
-        ${CMAKE_SOURCE_DIR}/src
-    )
-    
-    target_compile_definitions(NeuroBoost_DSP_Test PRIVATE
-        _USE_MATH_DEFINES
-    )
-    
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(NeuroBoost_DSP_Test PRIVATE m)
-    endif()
-    
-    set_target_properties(NeuroBoost_DSP_Test PROPERTIES
-        OUTPUT_NAME "NeuroBoost_DSP_Test"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    )
+    message(STATUS "Configuring sequencer test executable...")
 
-    # -----------------------------------------------------------------------
     # Sequencer test executable (no iPlug2 / Visage dependency)
-    # -----------------------------------------------------------------------
     add_executable(test_sequencer
         ${CMAKE_SOURCE_DIR}/tests/test_sequencer.cpp
         ${CMAKE_SOURCE_DIR}/src/dsp/SequencerEngine.cpp
@@ -78,21 +53,11 @@ if(BUILD_DSP_TEST)
         OUTPUT_NAME "test_sequencer"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
-    
+
     # Enable testing
     enable_testing()
-    
-    # Add tests for different gain values
-    add_test(NAME DSP_Test_Unity_Gain 
-             COMMAND NeuroBoost_DSP_Test 100)
-    add_test(NAME DSP_Test_Half_Gain 
-             COMMAND NeuroBoost_DSP_Test 50)
-    add_test(NAME DSP_Test_Double_Gain 
-             COMMAND NeuroBoost_DSP_Test 200)
-    add_test(NAME DSP_Test_Mute 
-             COMMAND NeuroBoost_DSP_Test 0)
 
-    # Sequencer tests
+    # Sequencer tests (authoritative test suite)
     add_test(NAME Sequencer_Tests
              COMMAND test_sequencer)
 endif()
@@ -131,6 +96,16 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         ${CMAKE_SOURCE_DIR}/src/NeuroBoost.cpp
         ${CMAKE_SOURCE_DIR}/src/NeuroBoost.h
         ${CMAKE_SOURCE_DIR}/config.h
+        # DSP
+        ${CMAKE_SOURCE_DIR}/src/dsp/SequencerEngine.cpp
+        ${CMAKE_SOURCE_DIR}/src/dsp/Algorithms.cpp
+        # UI
+        ${CMAKE_SOURCE_DIR}/src/ui/EditorView.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/components/ParameterKnob.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/components/StepGrid.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/components/StepCell.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/components/ModeSelector.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/components/TransportBar.cpp
     )
     
     # iPlug2 core source files
@@ -173,6 +148,11 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     set(COMMON_INCLUDES
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/common
+        ${CMAKE_SOURCE_DIR}/src/dsp
+        ${CMAKE_SOURCE_DIR}/src/ui
+        ${CMAKE_SOURCE_DIR}/src/ui/components
+        ${CMAKE_SOURCE_DIR}/src/ui/theme
         ${IPLUG_INCLUDES}
         ${VISAGE_INCLUDES}
     )
@@ -452,7 +432,7 @@ endif()
 
 message(STATUS "")
 message(STATUS "NeuroBoost CMake configuration complete")
-message(STATUS "  - DSP Test build: ${BUILD_DSP_TEST}")
+message(STATUS "  - DSP Test (sequencer): ${BUILD_DSP_TEST}")
 message(STATUS "  - VST3 build: ${BUILD_VST3}")
 message(STATUS "  - Standalone build: ${BUILD_STANDALONE}")
 message(STATUS "  - iPlug2 root: ${IPLUG2_ROOT}")

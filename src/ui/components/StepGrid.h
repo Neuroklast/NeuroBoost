@@ -1,0 +1,65 @@
+#pragma once
+
+#include "visage_ui/frame.h"
+#include "visage_graphics/canvas.h"
+#include "StepCell.h"
+#include "../../common/Constants.h"
+#include <array>
+#include <cstdint>
+
+/// Step sequencer grid component (up to MAX_STEPS cells, displayed 8 columns wide).
+/// Manages the array of StepCell children and the playhead highlight.
+class StepGrid : public visage::Frame
+{
+public:
+  static constexpr int kColumns = 8;
+
+  StepGrid();
+
+  void draw(visage::Canvas& canvas) override;
+  void resized() override;
+
+  // -----------------------------------------------------------------------
+  // State
+  // -----------------------------------------------------------------------
+
+  /// Set the number of active steps (1 – MAX_STEPS).
+  void setStepCount(int count);
+  int  getStepCount() const { return mStepCount; }
+
+  /// Update the current playhead position (0-based).
+  void setPlayheadStep(int step);
+
+  /// Set active state of a single step.
+  void setStepActive(int step, bool active);
+
+  /// Set velocity of a single step (0.0 – 1.0).
+  void setStepVelocity(int step, float velocity);
+
+  /// Set probability of a single step (0.0 – 1.0).
+  void setStepProbability(int step, float probability);
+
+  /// Trigger the flash animation for a step (called when it fires).
+  void triggerStepFlash(int step);
+
+  // -----------------------------------------------------------------------
+  // Callbacks
+  // -----------------------------------------------------------------------
+
+  /// Fired when a step is toggled: void(int stepIndex, bool active)
+  auto& onStepToggled() { return mOnStepToggled; }
+
+  /// Fired when velocity is changed via drag: void(int stepIndex, float velocity)
+  auto& onVelocityChanged() { return mOnVelocityChanged; }
+
+private:
+  int mStepCount    = 16;
+  int mPlayheadStep = -1;
+
+  std::array<StepCell, MAX_STEPS> mCells;
+
+  visage::CallbackList<void(int, bool)>  mOnStepToggled;
+  visage::CallbackList<void(int, float)> mOnVelocityChanged;
+
+  void layoutCells();
+};
