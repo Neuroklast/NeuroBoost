@@ -204,3 +204,80 @@ resource type that wraps a GPU resource.
 **Prevention:**
 Pre-commit checklist item 6: "Fonts stored as members, not created in draw()?"
 Every Visage component class must declare its fonts as member variables.
+
+---
+
+### [2026-03-31] Session: Sprint 2 – L-System Double-Buffer Technique
+
+**Category:** Realtime Safety / Architecture
+
+**What happened:**
+The L-System algorithm must expand strings exponentially (e.g., Fibonacci word
+grows as Fib(n) characters per iteration). Using `std::string` would require
+heap allocation for each expansion, violating realtime-safety rules.
+
+**Root cause:**
+The natural implementation uses `std::string` for string rewriting but the
+audio engine must be allocation-free.
+
+**Lesson:**
+Use two `static char[MAX_LSYSTEM_LENGTH]` buffers and swap the read/write
+pointers at each iteration. Truncate at MAX_LSYSTEM_LENGTH. The `static`
+keyword ensures the buffers live in BSS (zero-cost, no stack pressure), while
+still being safe since the function is only called from the control thread.
+
+**Prevention:**
+Any algorithm that produces a growing string must use a fixed-size double-buffer
+approach. Never use `std::string`, `std::vector<char>`, or any STL container
+that dynamically allocates inside `src/dsp/`.
+
+---
+
+### [2026-03-31] Session: Sprint 2 – Fractal Computation Caching Strategy
+
+**Category:** Realtime Safety / Performance
+
+**What happened:**
+The Mandelbrot set iteration is O(steps × maxIter) per call. Calling it inside
+`processBlock` every audio callback at 256-sample buffer size with 48 kHz would
+execute >180 times per second, making it prohibitively expensive.
+
+**Root cause:**
+The fractal parameters (cx, cy, zoom, maxIter, threshold) only change when the
+user moves a control, not on every audio block. There is no need to recompute
+the pattern every block.
+
+**Lesson:**
+Cache fractal results in `mFractalIterCounts[MAX_STEPS]` and
+`mEuclideanPattern[MAX_STEPS]`. Recompute only in `regeneratePattern()`, which
+is called from `setFractalParams()` (control thread) and `setGenerationMode()`.
+Never call `generateFractal()` from `processBlock()`.
+
+**Prevention:**
+Any algorithm that is O(n × iterations) must be "pull-based": compute on
+parameter change, cache result, read from cache in the audio thread. Add a
+comment in the header: "IMPORTANT: Call from control thread only."
+
+---
+
+### [2026-03-31] Session: Sprint 2 – Markov Absorbing State Handling
+
+**Category:** Algorithm Correctness
+
+**What happened:**
+A Markov transition matrix row that sums to 0 represents an "absorbing state"
+where no transition is possible. A naive implementation would attempt to divide
+by zero when normalizing the probability distribution.
+
+**Root cause:**
+The Markov chain implementation computed `r / rowSum` to sample from the
+cumulative distribution. If `rowSum == 0`, this produces NaN or a divide-by-zero.
+
+**Lesson:**
+Always check `rowSum <= 0` before normalizing. If the row is zero, fall back
+to a uniform distribution across all 12 pitch classes. This prevents crashes
+with user-supplied matrices and all-zero rows.
+
+**Prevention:**
+Add a `rowSum <= 0` guard in `generateMarkov`. Test explicitly: pass an
+all-zero 12×12 matrix and verify the output is still valid pitch classes [0,11].

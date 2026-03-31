@@ -21,10 +21,21 @@ SequencerEngine::SequencerEngine()
   , mEuclideanRotation(0)
   , mGlobalDensity(1.0)
   , mSeed(12345)
+  , mGenMode(GenerationMode::Euclidean)
+  , mMarkovStartNote(0)
+  , mFractalCx(-0.5)
+  , mFractalCy(0.0)
+  , mFractalZoom(3.0)
+  , mFractalMaxIter(50)
+  , mFractalThreshold(10)
+  , mLSystemAxiom('A')
+  , mLSystemIterations(4)
+  , mCARule(30)
+  , mCAIterations(16)
   , mOutputNoteCount(0)
+  , mNoteOffCount(0)
   , mRng(12345)
 {
-  // Initialise all steps with sensible defaults
   for (int i = 0; i < MAX_STEPS; ++i)
   {
     mSteps[i].pitch          = DEFAULT_ROOT_NOTE;
@@ -40,7 +51,20 @@ SequencerEngine::SequencerEngine()
     mSteps[i].active         = true;
     mSteps[i].accent         = false;
     mEuclideanPattern[i]     = false;
+    mMarkovPitches[i]        = 0;
+    mFractalIterCounts[i]    = 0;
   }
+
+  // Default L-System rules: A→AB, B→A (Fibonacci word)
+  for (int i = 0; i < MAX_LSYSTEM_LENGTH - 1; ++i)
+    mLSystemRuleA[i] = mLSystemRuleB[i] = '\0';
+  mLSystemRuleA[0] = 'A'; mLSystemRuleA[1] = 'B'; mLSystemRuleA[2] = '\0';
+  mLSystemRuleB[0] = 'A'; mLSystemRuleB[1] = '\0';
+
+  // Default Markov matrix: Blues preset
+  for (int r = 0; r < 12; ++r)
+    for (int c = 0; c < 12; ++c)
+      mMarkovMatrix[r][c] = Algorithms::MARKOV_PRESET_BLUES[r][c];
 
   // Generate initial Euclidean pattern
   Algorithms::generateEuclidean(mStepCount, mEuclideanHits, mEuclideanRotation,
@@ -68,10 +92,7 @@ void SequencerEngine::setStepCount(int steps)
   if (steps < 1)         steps = 1;
   if (steps > MAX_STEPS) steps = MAX_STEPS;
   mStepCount = steps;
-
-  // Re-generate the Euclidean pattern for the new step count
-  Algorithms::generateEuclidean(mStepCount, mEuclideanHits, mEuclideanRotation,
-                                mEuclideanPattern, MAX_STEPS);
+  regeneratePattern();
 }
 
 void SequencerEngine::setScale(ScaleMode mode, int rootNote)
@@ -84,8 +105,8 @@ void SequencerEngine::setEuclideanParams(int hits, int rotation)
 {
   mEuclideanHits     = hits;
   mEuclideanRotation = rotation;
-  Algorithms::generateEuclidean(mStepCount, mEuclideanHits, mEuclideanRotation,
-                                mEuclideanPattern, MAX_STEPS);
+  if (mGenMode == GenerationMode::Euclidean)
+    regeneratePattern();
 }
 
 void SequencerEngine::setGlobalDensity(double density)
@@ -101,17 +122,99 @@ void SequencerEngine::setSeed(uint64_t seed)
   mRng.seed(static_cast<std::mt19937::result_type>(seed));
 }
 
+void SequencerEngine::setGenerationMode(GenerationMode mode)
+{
+  mGenMode = mode;
+  regeneratePattern();
+}
+
+void SequencerEngine::setFractalParams(double cx, double cy, double zoom,
+                                        int maxIter, int threshold)
+{
+  mFractalCx        = cx;
+  mFractalCy        = cy;
+  mFractalZoom      = zoom;
+  mFractalMaxIter   = maxIter;
+  mFractalThreshold = threshold;
+  if (mGenMode == GenerationMode::Fractal)
+    regeneratePattern();
+}
+
+void SequencerEngine::setMarkovPreset(int presetIndex)
+{
+  const double (*src)[12] = nullptr;
+  if      (presetIndex == 0) src = Algorithms::MARKOV_PRESET_BLUES;
+  else if (presetIndex == 1) src = Algorithms::MARKOV_PRESET_JAZZ;
+  else                       src = Algorithms::MARKOV_PRESET_MINIMAL;
+
+  for (int r = 0; r < 12; ++r)
+    for (int c = 0; c < 12; ++c)
+      mMarkovMatrix[r][c] = src[r][c];
+
+  if (mGenMode == GenerationMode::Markov)
+    regeneratePattern();
+}
+
+// ----------------------------------------------------------------------------
+// regeneratePattern
+// ----------------------------------------------------------------------------
+
+void SequencerEngine::regeneratePattern()
+{
+  switch (mGenMode)
+  {
+    case GenerationMode::Euclidean:
+      Algorithms::generateEuclidean(mStepCount, mEuclideanHits, mEuclideanRotation,
+                                    mEuclideanPattern, MAX_STEPS);
+      break;
+
+    case GenerationMode::Fibonacci:
+      Algorithms::generateFibonacci(mStepCount, mEuclideanPattern, MAX_STEPS);
+      break;
+
+    case GenerationMode::LSystem:
+      Algorithms::generateLSystem(mLSystemAxiom, mLSystemRuleA, mLSystemRuleB,
+                                  mLSystemIterations, mEuclideanPattern, MAX_STEPS);
+      break;
+
+    case GenerationMode::CellularAutomata:
+      Algorithms::generateCellularAutomata(mCARule, mStepCount, mCAIterations,
+                                           mEuclideanPattern, MAX_STEPS);
+      break;
+
+    case GenerationMode::Fractal:
+      Algorithms::generateFractal(mStepCount, mFractalCx, mFractalCy, mFractalZoom,
+                                  mFractalMaxIter, mFractalThreshold,
+                                  mFractalIterCounts, mEuclideanPattern, MAX_STEPS);
+      break;
+
+    case GenerationMode::Markov:
+      // All steps active; generate pitch sequence deterministically
+      for (int i = 0; i < MAX_STEPS; ++i)
+        mEuclideanPattern[i] = true;
+      Algorithms::generateMarkov(mMarkovMatrix, mMarkovStartNote, mStepCount,
+                                 mRng, mMarkovPitches, MAX_STEPS);
+      break;
+
+    case GenerationMode::Probability:
+      // All steps attempt to fire; per-step probability is in mSteps[i].probability
+      for (int i = 0; i < MAX_STEPS; ++i)
+        mEuclideanPattern[i] = true;
+      break;
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Reset
 // ----------------------------------------------------------------------------
 
 void SequencerEngine::reset()
 {
-  mCurrentStep = 0;
-  mCurrentBeat = 0.0;
+  mCurrentStep     = 0;
+  mCurrentBeat     = 0.0;
   mOutputNoteCount = 0;
+  mNoteOffCount    = 0;
   mNoteTracker.reset();
-  // Re-seed for determinism: same seed → same sequence
   mRng.seed(static_cast<std::mt19937::result_type>(mSeed));
 }
 
@@ -121,10 +224,6 @@ void SequencerEngine::reset()
 
 double SequencerEngine::stepDuration() const
 {
-  // One step = one beat / 4 (sixteenth note at default) or configurable.
-  // Here a step equals one quarter note divided by (stepCount / 4).
-  // Simpler: keep each step as a quarter note beat for now.
-  // The sequencer plays mStepCount steps per bar (4 beats).
   return 4.0 / static_cast<double>(mStepCount);
 }
 
@@ -132,6 +231,7 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
                                    int nFrames, double sampleRate)
 {
   mOutputNoteCount = 0;
+  mNoteOffCount    = 0;
 
   mTransport.update(ppqPos, tempo, sampleRate, isPlaying, nFrames);
 
@@ -143,24 +243,30 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
 
   const double blockStart = mTransport.getBlockStartBeat();
   const double blockEnd   = mTransport.getBlockEndBeat();
-  const double sDur       = stepDuration();
 
-  // Emit note-offs for notes that expire within this block
-  ActiveNote noteOffs[MAX_POLYPHONY];
-  int nOff = mNoteTracker.checkNoteOffs(blockEnd, noteOffs);
-  (void)nOff; // Note-offs are managed by NoteTracker; host handles MIDI out
+  // Collect note-offs that expire within this block
+  ActiveNote noteOffBuffer[MAX_POLYPHONY];
+  int nOff = mNoteTracker.checkNoteOffs(blockEnd, noteOffBuffer);
+  for (int i = 0; i < nOff && mNoteOffCount < MAX_POLYPHONY; ++i)
+  {
+    MidiNote& off    = mNoteOffNotes[mNoteOffCount++];
+    off.pitch        = noteOffBuffer[i].pitch;
+    off.velocity     = 0;
+    off.channel      = noteOffBuffer[i].channel;
+    off.startBeat    = blockEnd;
+    off.durationBeats = 0.0;
+    off.sampleOffset = 0;
+  }
 
   // Walk through all steps that fall inside [blockStart, blockEnd)
+  const double sDur = stepDuration();
   while (mCurrentBeat < blockEnd && mOutputNoteCount < MAX_POLYPHONY)
   {
     if (mCurrentBeat >= blockStart)
-    {
       generateStepNotes(mCurrentStep, mCurrentBeat, nFrames);
-    }
 
-    // Advance step
     mCurrentBeat += sDur;
-    mCurrentStep = ((mCurrentStep + 1) % mStepCount);
+    mCurrentStep  = (mCurrentStep + 1) % mStepCount;
   }
 }
 
@@ -170,7 +276,6 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
     return;
 
   const SequenceStep& step = mSteps[stepIndex];
-
   if (!step.active)
     return;
 
@@ -183,8 +288,17 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
       return;
   }
 
-  // Quantize pitch to scale
-  int pitch = ScaleQuantizer::quantize(step.pitch, mRootNote, mScaleMode);
+  // Pitch: Markov mode overrides the step pitch with the generated pitch class
+  int basePitch = step.pitch;
+  if (mGenMode == GenerationMode::Markov)
+  {
+    int pitchClass = mMarkovPitches[stepIndex];
+    pitchClass     = ((pitchClass % 12) + 12) % 12;
+    int rootOctave = mRootNote / 12;
+    basePitch      = rootOctave * 12 + pitchClass;
+  }
+
+  int pitch = ScaleQuantizer::quantize(basePitch, mRootNote, mScaleMode);
 
   // Velocity with optional random range
   double vel = step.velocity;
@@ -194,27 +308,25 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
                                                   step.velocityRange * 0.5);
     vel += vDist(mRng);
   }
-  if (vel < 1.0)  vel = 1.0;
+  if (vel < 1.0)   vel = 1.0;
   if (vel > 127.0) vel = 127.0;
 
-  // Compute sample offset within the current block
   int sampleOffset = mTransport.beatToSampleOffset(stepBeat + step.microTiming);
-  if (sampleOffset < 0)       sampleOffset = 0;
+  if (sampleOffset < 0)        sampleOffset = 0;
   if (sampleOffset >= nFrames) sampleOffset = nFrames - 1;
 
-  // Register note-off
   double noteOffBeat = stepBeat + step.durationBeats;
-  mNoteTracker.noteOn(pitch, 1 /* default channel */, noteOffBeat);
+  mNoteTracker.noteOn(pitch, 1, noteOffBeat);
 
-  // Write to output buffer
   if (mOutputNoteCount < MAX_POLYPHONY)
   {
-    MidiNote& note       = mOutputNotes[mOutputNoteCount++];
-    note.pitch           = pitch;
-    note.velocity        = static_cast<int>(vel);
-    note.channel         = 1;
-    note.startBeat       = stepBeat;
-    note.durationBeats   = step.durationBeats;
-    note.sampleOffset    = sampleOffset;
+    MidiNote& note     = mOutputNotes[mOutputNoteCount++];
+    note.pitch         = pitch;
+    note.velocity      = static_cast<int>(vel);
+    note.channel       = 1;
+    note.startBeat     = stepBeat;
+    note.durationBeats = step.durationBeats;
+    note.sampleOffset  = sampleOffset;
   }
 }
+
