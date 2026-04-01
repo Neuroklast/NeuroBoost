@@ -106,7 +106,7 @@ jobs:
         cd deps
         git clone https://github.com/iPlug2/iPlug2.git
         cd iPlug2
-        git checkout 4ca7bc02d1d0bc05e7d1c2c6b0d7c1aa0eca2bef
+        git checkout 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
         git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
     
     - name: Clone Visage

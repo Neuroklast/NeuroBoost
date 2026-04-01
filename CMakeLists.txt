@@ -116,7 +116,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         FetchContent_Declare(
             iPlug2
             GIT_REPOSITORY https://github.com/iPlug2/iPlug2.git
-            GIT_TAG 4ca7bc02d1d0bc05e7d1c2c6b0d7c1aa0eca2bef
+            GIT_TAG 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
             GIT_SHALLOW TRUE
             SOURCE_DIR "${IPLUG2_ROOT}"
         )
