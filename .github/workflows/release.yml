@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'copilot/fix-vst3-sdk-clone'
   workflow_dispatch:
     inputs:
       tag:
@@ -261,8 +263,11 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
           echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-        else
+        elif echo "${{ github.ref }}" | grep -q "^refs/tags/"; then
           echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        else
+          # Branch push trigger: use the fixed release tag for this build
+          echo "value=v0.1.6-alpha" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Download all VST3 artifacts
