@@ -53,6 +53,9 @@ public:
   /// Update preset browser from host (called every OnIdle tick).
   void updatePresetBrowser(int currentPresetIdx, bool dirty);
 
+  /// Set the list of preset names shown in the browser.
+  void setPresetNames(std::vector<std::string> names);
+
   // -----------------------------------------------------------------------
   // Layout constants (matches 900×600 default size)
   // -----------------------------------------------------------------------

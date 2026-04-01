@@ -25,6 +25,7 @@ jobs:
     - name: Setup dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
+        set -e
         sudo apt-get update
         sudo apt-get install -y build-essential cmake git \
           libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
@@ -37,27 +38,42 @@ jobs:
       run: |
         brew install cmake || true
 
-    # ── Windows dependencies ────────────────────────────────────────────────
-    - name: Setup dependencies (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
-
     # ── Clone iPlug2 + VST3 SDK ─────────────────────────────────────────────
-    - name: Clone iPlug2
+    - name: Clone iPlug2 + VST3 SDK
       shell: bash
       run: |
+        set -e
         mkdir -p deps
         cd deps
         git clone https://github.com/iPlug2/iPlug2.git
         cd iPlug2
         git checkout 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
-        git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
+        git submodule update --init --recursive Dependencies/IPlug/VST3_SDK || true
+
+        # Verify VST3 SDK header; fall back to direct clone if submodule failed
+        VST3_SDK_DIR="Dependencies/IPlug/VST3_SDK"
+        VST3_HEADER="$VST3_SDK_DIR/public.sdk/source/vst/vstsinglecomponenteffect.h"
+        if [ ! -f "$VST3_HEADER" ]; then
+          echo "::warning::VST3_SDK submodule failed or incomplete — cloning directly from steinbergmedia/vst3sdk"
+          rm -rf "$VST3_SDK_DIR"
+          git clone --depth 1 https://github.com/steinbergmedia/vst3sdk.git "$VST3_SDK_DIR"
+          cd "$VST3_SDK_DIR"
+          git submodule update --init --recursive
+          cd ../..
+        fi
+
+        # Final verification
+        if [ ! -f "$VST3_HEADER" ]; then
+          echo "::error::VST3 SDK header still not found after fallback clone: $VST3_HEADER"
+          exit 1
+        fi
+        echo "✅ VST3 SDK ready at $VST3_HEADER"
 
     # ── Clone Visage ────────────────────────────────────────────────────────
     - name: Clone Visage
       shell: bash
       run: |
+        set -e
         cd deps
         git clone https://github.com/VitalAudio/visage.git
         cd visage
@@ -67,16 +83,55 @@ jobs:
     - name: Build Visage
       shell: bash
       run: |
+        set -e
         cd deps/visage
         mkdir -p build
         cd build
         cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
         cmake --build . --config Release --parallel 2
 
+    # ── Verify all dependencies before configuring ──────────────────────────
+    - name: Verify dependencies
+      shell: bash
+      run: |
+        set -e
+        echo "=== Verifying iPlug2 ==="
+        if [ ! -d "deps/iPlug2" ]; then
+          echo "::error::deps/iPlug2 not found"
+          exit 1
+        fi
+        echo "✅ deps/iPlug2 found"
+
+        echo "=== Verifying VST3 SDK ==="
+        VST3_HEADER="deps/iPlug2/Dependencies/IPlug/VST3_SDK/public.sdk/source/vst/vstsinglecomponenteffect.h"
+        if [ ! -f "$VST3_HEADER" ]; then
+          echo "::error::VST3 SDK header not found: $VST3_HEADER"
+          exit 1
+        fi
+        echo "✅ VST3 SDK header found"
+
+        echo "=== Verifying Visage library ==="
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          VISAGE_LIB=$(find deps/visage/build -name "visage.lib" 2>/dev/null | head -n 1)
+          if [ -z "$VISAGE_LIB" ]; then
+            # Also check for libvisage.a (MinGW/Ninja)
+            VISAGE_LIB=$(find deps/visage/build -name "libvisage.a" 2>/dev/null | head -n 1)
+          fi
+        else
+          VISAGE_LIB=$(find deps/visage/build -name "libvisage.a" 2>/dev/null | head -n 1)
+        fi
+        if [ -z "$VISAGE_LIB" ]; then
+          echo "::error::Visage library not found under deps/visage/build/"
+          find deps/visage/build -type f -name "*.a" -o -name "*.lib" 2>/dev/null || true
+          exit 1
+        fi
+        echo "✅ Visage library found: $VISAGE_LIB"
+
     # ── Configure NeuroBoost ────────────────────────────────────────────────
     - name: Configure NeuroBoost
       shell: bash
       run: |
+        set -e
         mkdir -p build
         cd build
         cmake -DCMAKE_BUILD_TYPE=Release \
@@ -90,6 +145,7 @@ jobs:
     - name: Build NeuroBoost VST3
       shell: bash
       run: |
+        set -e
         cd build
         cmake --build . --config Release --parallel 2
 
@@ -107,6 +163,7 @@ jobs:
       if: runner.os == 'Linux'
       shell: bash
       run: |
+        set -e
         mkdir -p dist
         # Linux VST3 output is a shared library (.so); fall back to .vst3 bundle name
         if [ -f build/vst3/NeuroBoost.so ]; then
@@ -125,6 +182,7 @@ jobs:
       if: runner.os == 'macOS'
       shell: bash
       run: |
+        set -e
         mkdir -p dist
         # macOS: try directory bundle first, then flat file
         VST3_PATH=$(find build -name "NeuroBoost.vst3" -type d | head -n 1)
@@ -148,6 +206,7 @@ jobs:
       if: runner.os == 'Windows'
       shell: bash
       run: |
+        set -e
         mkdir -p dist
         # Windows: .vst3 is a file (renamed .dll), not a directory bundle
         VST3_PATH=$(find build -name "NeuroBoost.vst3" -type f | head -n 1)
