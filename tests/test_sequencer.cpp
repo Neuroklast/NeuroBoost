@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <vector>
 #include <cstdio>
@@ -2067,7 +2068,16 @@ static void testMidiExport()
 {
   printSection("MidiExport");
 
-  const char* tmpPath = "/tmp/test_neuroboost_export.mid";
+  // Cross-platform temp path: use TEMP/TMP env var on Windows, /tmp on Unix
+#ifdef _WIN32
+  const char* tmpDir = std::getenv("TEMP");
+  if (!tmpDir) tmpDir = std::getenv("TMP");
+  if (!tmpDir) tmpDir = ".";
+  std::string tmpPathStr = std::string(tmpDir) + "\\test_neuroboost_export.mid";
+#else
+  std::string tmpPathStr = "/tmp/test_neuroboost_export.mid";
+#endif
+  const char* tmpPath = tmpPathStr.c_str();
 
   // ── Test 1: Valid MIDI file header (MThd) ──────────────────────────────
   {
@@ -2095,38 +2105,41 @@ static void testMidiExport()
     bool ok = MidiExport::writeToFile(tmpPath, p);
     EXPECT(ok, "MidiExport: writeToFile returns true");
 
-    auto data = readFile(tmpPath);
-    EXPECT(data.size() >= 14, "MidiExport: file has at least 14 bytes (MThd chunk)");
-
-    if (data.size() >= 4)
+    if (ok) // guard: skip read-based assertions on write failure to prevent cascading errors
     {
-      bool mthd = (data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
-      EXPECT(mthd, "MidiExport: file starts with MThd magic");
-    }
+      auto data = readFile(tmpPath);
+      EXPECT(data.size() >= 14, "MidiExport: file has at least 14 bytes (MThd chunk)");
 
-    // Header chunk length must be 6 (big-endian 00 00 00 06)
-    if (data.size() >= 8)
-    {
-      uint32_t hlen = ((uint32_t)data[4] << 24) | ((uint32_t)data[5] << 16)
-                    | ((uint32_t)data[6] << 8)  |  (uint32_t)data[7];
-      EXPECT(hlen == 6, "MidiExport: MThd chunk length == 6");
-    }
+      if (data.size() >= 4)
+      {
+        bool mthd = (data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
+        EXPECT(mthd, "MidiExport: file starts with MThd magic");
+      }
 
-    // Format 0, 1 track
-    if (data.size() >= 12)
-    {
-      uint16_t fmt    = ((uint16_t)data[8] << 8)  | data[9];
-      uint16_t ntrks  = ((uint16_t)data[10] << 8) | data[11];
-      EXPECT(fmt == 0,   "MidiExport: format 0 (single track)");
-      EXPECT(ntrks == 1, "MidiExport: 1 track");
-    }
+      // Header chunk length must be 6 (big-endian 00 00 00 06)
+      if (data.size() >= 8)
+      {
+        uint32_t hlen = ((uint32_t)data[4] << 24) | ((uint32_t)data[5] << 16)
+                      | ((uint32_t)data[6] << 8)  |  (uint32_t)data[7];
+        EXPECT(hlen == 6, "MidiExport: MThd chunk length == 6");
+      }
 
-    // MTrk chunk follows immediately after MThd (at offset 14)
-    if (data.size() >= 18)
-    {
-      bool mtrk = (data[14] == 'M' && data[15] == 'T'
-                && data[16] == 'r' && data[17] == 'k');
-      EXPECT(mtrk, "MidiExport: MTrk chunk present at offset 14");
+      // Format 0, 1 track
+      if (data.size() >= 12)
+      {
+        uint16_t fmt    = ((uint16_t)data[8] << 8)  | data[9];
+        uint16_t ntrks  = ((uint16_t)data[10] << 8) | data[11];
+        EXPECT(fmt == 0,   "MidiExport: format 0 (single track)");
+        EXPECT(ntrks == 1, "MidiExport: 1 track");
+      }
+
+      // MTrk chunk follows immediately after MThd (at offset 14)
+      if (data.size() >= 18)
+      {
+        bool mtrk = (data[14] == 'M' && data[15] == 'T'
+                  && data[16] == 'r' && data[17] == 'k');
+        EXPECT(mtrk, "MidiExport: MTrk chunk present at offset 14");
+      }
     }
   }
 
@@ -2157,18 +2170,26 @@ static void testMidiExport()
     p.rootNote            = 60;
     p.scaleMode           = ScaleMode::Major;
 
-    MidiExport::writeToFile(tmpPath, p);
-    auto data = readFile(tmpPath);
+    bool ok2 = MidiExport::writeToFile(tmpPath, p);
 
-    // Count 0x90 (Note-On) events in track data
-    int noteOnCount = 0;
-    for (size_t i = 0; i + 2 < data.size(); ++i)
+    if (ok2) // guard against cascading failures
     {
-      if ((data[i] & 0xF0) == 0x90 && data[i + 2] > 0)
-        ++noteOnCount;
+      auto data = readFile(tmpPath);
+
+      // Count 0x90 (Note-On) events in track data
+      int noteOnCount = 0;
+      for (size_t i = 0; i + 2 < data.size(); ++i)
+      {
+        if ((data[i] & 0xF0) == 0x90 && data[i + 2] > 0)
+          ++noteOnCount;
+      }
+      EXPECT(noteOnCount == activeCount,
+             "MidiExport: note-on count equals active step count (8)");
     }
-    EXPECT(noteOnCount == activeCount,
-           "MidiExport: note-on count equals active step count (8)");
+    else
+    {
+      EXPECT(false, "MidiExport: note-on count equals active step count (8)");
+    }
   }
 
   // ── Test 3: Empty pattern produces valid (but empty) file ─────────────
@@ -2186,10 +2207,13 @@ static void testMidiExport()
 
     bool ok = MidiExport::writeToFile(tmpPath, p);
     EXPECT(ok, "MidiExport: empty pattern writes without error");
-    auto data = readFile(tmpPath);
-    EXPECT(data.size() >= 14, "MidiExport: empty pattern file has MThd");
-    if (data.size() >= 4)
-      EXPECT(data[0] == 'M', "MidiExport: empty pattern file has correct magic");
+    if (ok) // guard against cascading failures
+    {
+      auto data = readFile(tmpPath);
+      EXPECT(data.size() >= 14, "MidiExport: empty pattern file has MThd");
+      if (data.size() >= 4)
+        EXPECT(data[0] == 'M', "MidiExport: empty pattern file has correct magic");
+    }
   }
 
   // ── Test 4: Ratcheted step produces multiple sub-notes ────────────────
@@ -2211,16 +2235,24 @@ static void testMidiExport()
     p.rootNote            = 60;
     p.scaleMode           = ScaleMode::Chromatic;
 
-    MidiExport::writeToFile(tmpPath, p);
-    auto data = readFile(tmpPath);
+    bool ok4 = MidiExport::writeToFile(tmpPath, p);
 
-    int noteOnCount = 0;
-    for (size_t i = 0; i + 2 < data.size(); ++i)
-      if ((data[i] & 0xF0) == 0x90 && data[i + 2] > 0)
-        ++noteOnCount;
+    if (ok4) // guard against cascading failures
+    {
+      auto data = readFile(tmpPath);
 
-    EXPECT(noteOnCount == 4,
-           "MidiExport: ratchet count=4 produces 4 note-on events");
+      int noteOnCount = 0;
+      for (size_t i = 0; i + 2 < data.size(); ++i)
+        if ((data[i] & 0xF0) == 0x90 && data[i + 2] > 0)
+          ++noteOnCount;
+
+      EXPECT(noteOnCount == 4,
+             "MidiExport: ratchet count=4 produces 4 note-on events");
+    }
+    else
+    {
+      EXPECT(false, "MidiExport: ratchet count=4 produces 4 note-on events");
+    }
   }
 
   // ── Test 5: VLQ encoding correctness ──────────────────────────────────
