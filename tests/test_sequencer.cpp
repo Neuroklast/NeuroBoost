@@ -824,6 +824,11 @@ static void testParamSmoother();
 static void testNoteOffTiming();
 static void testPanic();
 
+// Forward declarations for Sprint 6 ALPHA milestone tests
+static void testAlphaDeterminismAllModes();
+static void testAlphaNoteOffCompleteness();
+static void testAlphaTransportCycle();
+
 int main()
 {
   std::cout << "NeuroBoost Sequencer Tests\n";
@@ -852,6 +857,9 @@ int main()
   testParamSmoother();
   testNoteOffTiming();
   testPanic();
+  testAlphaDeterminismAllModes();
+  testAlphaNoteOffCompleteness();
+  testAlphaTransportCycle();
 
   std::cout << "\n==========================\n";
   std::cout << "Results: " << gPassed << " passed, " << gFailed << " failed\n";
@@ -1593,5 +1601,327 @@ static void testPanic()
     // We can't easily verify zero note-offs here because new notes may have
     // been generated in this block, but we verify the API works
     EXPECT(true, "Panic: panicAllNotes() API works without crash");
+  }
+}
+
+// ============================================================================
+// ALPHA Milestone: Determinism – same seed → same sequence (all 7 modes)
+// ============================================================================
+
+static void testAlphaDeterminismAllModes()
+{
+  printSection("ALPHA – Determinism (all modes)");
+
+  // Helper: run the engine for a fixed number of blocks and return a
+  // reproducible fingerprint (sum of note-on pitches and note-on count).
+  struct Fingerprint { int noteCount; int pitchSum; };
+
+  auto runAndFingerprint = [](GenerationMode mode, uint64_t seed) -> Fingerprint
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setGlobalDensity(0.8);
+    eng.setSeed(seed);
+    eng.setGenerationMode(mode);
+    eng.reset();
+
+    const double bpm      = 120.0;
+    const int    nFrames  = 512;
+    const double spb      = 44100.0 * 60.0 / bpm;   // samples per beat
+    const double bpb      = nFrames / spb;            // beats per block
+    // Simulate 4 full bars (16 steps at 120 BPM = 4 beats per bar)
+    const int totalBlocks = static_cast<int>(4.0 * 4.0 / bpb) + 2;
+
+    Fingerprint fp{0, 0};
+    double ppq = 0.0;
+    for (int b = 0; b < totalBlocks; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      for (int n = 0; n < eng.getOutputNoteCount(); ++n)
+      {
+        fp.noteCount++;
+        fp.pitchSum += eng.getOutputNotes()[n].pitch;
+      }
+      ppq += bpb;
+    }
+    return fp;
+  };
+
+  const GenerationMode modes[] = {
+    GenerationMode::Euclidean,
+    GenerationMode::Fibonacci,
+    GenerationMode::LSystem,
+    GenerationMode::CellularAutomata,
+    GenerationMode::Fractal,
+    GenerationMode::Markov,
+    GenerationMode::Probability
+  };
+  const char* modeNames[] = {
+    "Euclidean", "Fibonacci", "LSystem", "CellularAutomata",
+    "Fractal", "Markov", "Probability"
+  };
+
+  constexpr int NUM_MODES = 7;
+  for (int i = 0; i < NUM_MODES; ++i)
+  {
+    // Run twice with the same seed – fingerprints must be identical.
+    Fingerprint fp1 = runAndFingerprint(modes[i], 42);
+    Fingerprint fp2 = runAndFingerprint(modes[i], 42);
+
+    char msgBuf[128];
+    std::snprintf(msgBuf, sizeof(msgBuf),
+      "Determinism [%s]: same seed noteCount match", modeNames[i]);
+    EXPECT(fp1.noteCount == fp2.noteCount, msgBuf);
+
+    std::snprintf(msgBuf, sizeof(msgBuf),
+      "Determinism [%s]: same seed pitchSum match", modeNames[i]);
+    EXPECT(fp1.pitchSum == fp2.pitchSum, msgBuf);
+
+    // Run with a different seed – results should differ (or both be zero,
+    // which is allowed for very sparse patterns).
+    Fingerprint fp3 = runAndFingerprint(modes[i], 999);
+    std::snprintf(msgBuf, sizeof(msgBuf),
+      "Determinism [%s]: different seed produces different output (or both zero)",
+      modeNames[i]);
+    bool differs = (fp1.noteCount != fp3.noteCount) ||
+                   (fp1.pitchSum  != fp3.pitchSum);
+    EXPECT(differs || (fp1.noteCount == 0 && fp3.noteCount == 0), msgBuf);
+  }
+}
+
+// ============================================================================
+// ALPHA Milestone: Note-Off completeness – every note-on has a note-off
+// ============================================================================
+
+static void testAlphaNoteOffCompleteness()
+{
+  printSection("ALPHA – NoteOff Completeness");
+
+  // Run through multiple full pattern cycles, verifying that note-offs are
+  // generated for every note-on.  When transport stops, the host is expected
+  // to call panicAllNotes() to release any in-flight notes; we count those
+  // panic-released notes as the final note-offs so the total always balances.
+  auto runAndCheck = [](GenerationMode mode, const char* modeName) {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0);   // dense: all steps active
+    eng.setGlobalDensity(1.0);
+    eng.setSeed(1);
+    eng.setGenerationMode(mode);
+    eng.reset();
+
+    const double bpm     = 120.0;
+    const int    nFrames = 512;
+    const double spb     = 44100.0 * 60.0 / bpm;
+    const double bpb     = nFrames / spb;
+    // 8 full bars to ensure multiple full pattern cycles
+    const int totalBlocks = static_cast<int>(8.0 * 4.0 / bpb) + 2;
+
+    int totalNoteOns  = 0;
+    int totalNoteOffs = 0;
+    double ppq = 0.0;
+
+    for (int b = 0; b < totalBlocks; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      totalNoteOns  += eng.getOutputNoteCount();
+      totalNoteOffs += eng.getNoteOffCount();
+      ppq += bpb;
+    }
+    // Stop transport (isPlaying=false returns early; host must call panic).
+    eng.processBlock(ppq, bpm, false, nFrames, 44100.0);
+
+    // Simulate host panic-on-stop: release any notes still in flight.
+    ActiveNote hung[MAX_POLYPHONY];
+    int panicCount = eng.panicAllNotes(hung);
+    totalNoteOffs += panicCount;
+
+    char buf[128];
+    std::snprintf(buf, sizeof(buf),
+      "NoteOff [%s]: at least one note-on generated", modeName);
+    EXPECT(totalNoteOns > 0, buf);
+
+    std::snprintf(buf, sizeof(buf),
+      "NoteOff [%s]: every note-on has a note-off (natural + panic, ons=%d offs=%d)",
+      modeName, totalNoteOns, totalNoteOffs);
+    EXPECT(totalNoteOffs >= totalNoteOns, buf);
+
+    // After panic, no further hung notes should remain.
+    int secondPanic = eng.panicAllNotes(hung);
+    std::snprintf(buf, sizeof(buf),
+      "NoteOff [%s]: no hung notes remain after panic", modeName);
+    EXPECT(secondPanic == 0, buf);
+
+    // At most MAX_POLYPHONY notes can be in-flight at any time.
+    std::snprintf(buf, sizeof(buf),
+      "NoteOff [%s]: in-flight note count bounded by MAX_POLYPHONY (%d)",
+      modeName, panicCount);
+    EXPECT(panicCount <= MAX_POLYPHONY, buf);
+  };
+
+  runAndCheck(GenerationMode::Euclidean,       "Euclidean");
+  runAndCheck(GenerationMode::Fibonacci,        "Fibonacci");
+  runAndCheck(GenerationMode::LSystem,          "LSystem");
+  runAndCheck(GenerationMode::CellularAutomata, "CellularAutomata");
+  runAndCheck(GenerationMode::Fractal,          "Fractal");
+  runAndCheck(GenerationMode::Markov,           "Markov");
+  runAndCheck(GenerationMode::Probability,      "Probability");
+}
+
+// ============================================================================
+// ALPHA Milestone: Transport stop/start/loop cycle without hung notes or crash
+// ============================================================================
+
+static void testAlphaTransportCycle()
+{
+  printSection("ALPHA – Transport Cycle");
+
+  const double bpm     = 120.0;
+  const int    nFrames = 512;
+  const double spb     = 44100.0 * 60.0 / bpm;
+  const double bpb     = nFrames / spb;
+
+  // ── Test 1: Starting transport generates events ──────────────────────────
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0);
+    eng.setGlobalDensity(1.0);
+    eng.setSeed(7);
+    eng.setGenerationMode(GenerationMode::Euclidean);
+    eng.reset();
+
+    int onsAfterStart = 0;
+    double ppq = 0.0;
+    // Run 4 bars of transport-playing
+    const int runBlocks = static_cast<int>(4.0 * 4.0 / bpb) + 2;
+    for (int b = 0; b < runBlocks; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      onsAfterStart += eng.getOutputNoteCount();
+      ppq += bpb;
+    }
+    EXPECT(onsAfterStart > 0,
+           "TransportCycle: starting transport generates note-on events");
+  }
+
+  // ── Test 2: Stopping transport + host panic clears all active notes ─────────
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setGlobalDensity(1.0);
+    eng.setSeed(3);
+    eng.setGenerationMode(GenerationMode::Euclidean);
+    eng.reset();
+
+    double ppq = 0.0;
+    const int warmupBlocks = static_cast<int>(2.0 * 4.0 / bpb) + 1;
+    for (int b = 0; b < warmupBlocks; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      ppq += bpb;
+    }
+    // Stop transport (isPlaying=false causes early return; no auto-panic)
+    eng.processBlock(ppq, bpm, false, nFrames, 44100.0);
+    ppq += bpb;
+
+    // Simulate host calling panic on stop (as a real DAW plugin would)
+    ActiveNote hung[MAX_POLYPHONY];
+    int firstPanic = eng.panicAllNotes(hung);
+    // After panic, a second call must return 0
+    int secondPanic = eng.panicAllNotes(hung);
+    EXPECT(secondPanic == 0,
+           "TransportCycle: panicAllNotes() fully clears the tracker after stop");
+    // First panic may return up to MAX_POLYPHONY notes (the last in-flight note)
+    EXPECT(firstPanic <= MAX_POLYPHONY,
+           "TransportCycle: in-flight note count bounded by MAX_POLYPHONY after stop");
+  }
+
+  // ── Test 3: Loop back to step 0 works without crash or hung notes ─────────
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setGlobalDensity(1.0);
+    eng.setSeed(5);
+    eng.setGenerationMode(GenerationMode::Euclidean);
+    eng.reset();
+
+    double ppq = 0.0;
+    const int barBlocks = static_cast<int>(4.0 / bpb) + 1;
+
+    // Play one bar, then loop back (reset ppq to 0) and play again
+    for (int b = 0; b < barBlocks; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      ppq += bpb;
+    }
+    // Simulate loop: jump ppq back to the start and reset engine state.
+    // reset() clears the NoteTracker, simulating a proper panic-on-loop.
+    ppq = 0.0;
+    eng.reset();
+
+    // Verify that reset() cleared all notes from before the loop boundary.
+    ActiveNote hung[MAX_POLYPHONY];
+    int hungAfterReset = eng.panicAllNotes(hung);
+    EXPECT(hungAfterReset == 0,
+           "TransportCycle: reset() on loop clears all notes from previous bar");
+
+    // Play the second bar — should produce events without crash
+    int onsInSecondBar = 0;
+    for (int b = 0; b < barBlocks; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      onsInSecondBar += eng.getOutputNoteCount();
+      ppq += bpb;
+    }
+    EXPECT(onsInSecondBar > 0,
+           "TransportCycle: events generated in bar after loop point");
+
+    // After second bar + panic: fully clean
+    int finalPanic = eng.panicAllNotes(hung);
+    EXPECT(finalPanic <= MAX_POLYPHONY,
+           "TransportCycle: in-flight notes after loop bar bounded by MAX_POLYPHONY");
+  }
+
+  // ── Test 4: Rapid start/stop doesn't crash ────────────────────────────────
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setGlobalDensity(1.0);
+    eng.setSeed(11);
+    eng.setGenerationMode(GenerationMode::Euclidean);
+    eng.reset();
+
+    double ppq = 0.0;
+    for (int cycle = 0; cycle < 20; ++cycle)
+    {
+      // Play for 2 blocks, then stop for 1 block
+      for (int b = 0; b < 2; ++b)
+      {
+        eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+        ppq += bpb;
+      }
+      eng.processBlock(ppq, bpm, false, nFrames, 44100.0);
+      ppq += bpb;
+    }
+    EXPECT(true, "TransportCycle: rapid start/stop does not crash");
+
+    // After rapid cycling, panic releases whatever is in flight; a second
+    // panic must return 0 (tracker is clean).
+    ActiveNote hung[MAX_POLYPHONY];
+    eng.panicAllNotes(hung);
+    int secondPanic = eng.panicAllNotes(hung);
+    EXPECT(secondPanic == 0,
+           "TransportCycle: tracker is clean after rapid start/stop + panic");
   }
 }

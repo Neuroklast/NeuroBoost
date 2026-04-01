@@ -206,7 +206,7 @@ Or run individual tests:
 
 ## License
 
-This project is open source. See LICENSE for details.
+This software is proprietary. See LICENSE for details.
 
 ## Acknowledgments
 
