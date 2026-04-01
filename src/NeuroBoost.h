@@ -12,7 +12,12 @@
 #include "common/Presets.h"
 #include "common/Types.h"
 
-using namespace iplug;
+// Import iPlug2 types used in the plugin class declaration
+using iplug::Plugin;
+using iplug::InstanceInfo;
+using iplug::IMidiMsg;
+using iplug::IMidiQueue;
+using iplug::sample;
 
 const int kNumPresets = kNumFactoryPresets;
 
