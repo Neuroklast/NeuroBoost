@@ -16,6 +16,13 @@ EditorView::EditorView(std::function<double(int)> getParam,
 
 void EditorView::buildWidgets()
 {
+  // -- Preset browser --
+  mPresetBrowser = std::make_unique<PresetBrowser>();
+  mPresetBrowser->mOnPresetSelected = [this](int idx) {
+    if (mOnPresetSelected) mOnPresetSelected(idx);
+  };
+  addChild(mPresetBrowser.get());
+
   // -- Header: Generation mode selector --
   mGenModeSelector = std::make_unique<ModeSelector>();
   mGenModeSelector->setOptions({
@@ -56,6 +63,18 @@ void EditorView::buildWidgets()
     mSetParam(kRootNote, static_cast<double>(octave * 12 + idx));
   };
   addChild(mRootNoteSelector.get());
+
+  // -- Header: MIDI Input Mode selector --
+  mMidiModeSelector = std::make_unique<ModeSelector>();
+  mMidiModeSelector->setOptions({
+    "MIDI: Off", "MIDI: Thru", "MIDI: Transpose",
+    "MIDI: Trigger", "MIDI: Gate", "MIDI: Thru+Gen"
+  });
+  mMidiModeSelector->setSelectedIndex(static_cast<int>(mGetParam(kMidiInputMode)));
+  mMidiModeSelector->onSelectionChanged() = [this](int idx) {
+    mSetParam(kMidiInputMode, static_cast<double>(idx));
+  };
+  addChild(mMidiModeSelector.get());
 
   // -- Step grid --
   mStepGrid = std::make_unique<StepGrid>();
@@ -176,27 +195,34 @@ void EditorView::layoutWidgets()
   float scaleX = W / 900.0f;
   float scaleY = H / 600.0f;
 
+  float presetH    = kPresetBarH  * scaleY;
   float hdrH       = kHeaderH     * scaleY;
   float gridW      = kGridW       * scaleX;
   float gridH      = kGridH       * scaleY;
-  float paramH     = kParamPanelH * scaleY;
   float transportH = kTransportH  * scaleY;
 
-  // Header selectors
-  float selW = 150.0f * scaleX;
-  float selH = 28.0f  * scaleY;
-  float selY = (hdrH - selH) / 2.0f;
+  // Preset browser (top strip)
+  mPresetBrowser->setBounds(0.0f, 0.0f, W, presetH);
 
-  float genModeX = W / 2.0f - selW * 1.5f - 8.0f;
+  float hdrY = presetH;
+
+  // Header selectors
+  float selW = 130.0f * scaleX;
+  float selH = 28.0f  * scaleY;
+  float selY = hdrY + (hdrH - selH) / 2.0f;
+
+  float genModeX = 8.0f * scaleX;
   mGenModeSelector->setBounds(genModeX, selY, selW, selH);
-  mScaleModeSelector->setBounds(genModeX + selW + 8.0f, selY, selW, selH);
-  mRootNoteSelector->setBounds(genModeX + (selW + 8.0f) * 2.0f, selY, 80.0f * scaleX, selH);
+  mScaleModeSelector->setBounds(genModeX + selW + 6.0f, selY, selW, selH);
+  mRootNoteSelector->setBounds(genModeX + (selW + 6.0f) * 2.0f, selY, 60.0f * scaleX, selH);
+  mMidiModeSelector->setBounds(genModeX + (selW + 6.0f) * 2.0f + 60.0f * scaleX + 6.0f,
+                                selY, selW, selH);
 
   // Step grid
-  mStepGrid->setBounds(0.0f, hdrH, gridW, gridH);
+  mStepGrid->setBounds(0.0f, hdrY + hdrH, gridW, gridH);
 
   // Parameter panel
-  float panelY = hdrH + gridH;
+  float panelY = hdrY + hdrH + gridH;
   float panelW = W / 3.0f;
   float knobSize = 68.0f * std::min(scaleX, scaleY);
   float knobY    = panelY + 20.0f * scaleY;
@@ -237,10 +263,11 @@ void EditorView::draw(visage::Canvas& canvas)
   float W = static_cast<float>(width());
   float H = static_cast<float>(height());
   float scaleY = H / 600.0f;
+  float scaleX = W / 900.0f;
 
-  float hdrH   = kHeaderH * scaleY;
-  float gridH  = kGridH   * scaleY;
-  float transH = kTransportH * scaleY;
+  float presetH = kPresetBarH  * scaleY;
+  float hdrH    = kHeaderH     * scaleY;
+  float gridH   = kGridH       * scaleY;
 
   // Overall background
   canvas.setColor(BackgroundColor);
@@ -248,23 +275,22 @@ void EditorView::draw(visage::Canvas& canvas)
 
   // Header background
   canvas.setColor(PanelColor);
-  canvas.fill(0.0f, 0.0f, W, hdrH);
+  canvas.fill(0.0f, presetH, W, hdrH);
 
   // Header title
-  visage::Font titleFont = makeFont(22.0f);
+  visage::Font titleFont = makeFont(20.0f);
   canvas.setColor(AccentColor);
   canvas.text("NeuroBoost", titleFont, visage::Font::kLeft,
-              16.0f, 0.0f, 160.0f, hdrH);
+              16.0f, presetH, 160.0f, hdrH);
 
   drawHeader(canvas);
 
   // Divider between grid and parameter panel
-  float panelY = hdrH + gridH;
+  float panelY = presetH + hdrH + gridH;
   canvas.setColor(SelectorBorderColor);
   canvas.fill(0.0f, panelY, W, 1.0f);
 
   // Parameter panel groups
-  float scaleX = W / 900.0f;
   float groupW = W / 3.0f;
   float groupH = kParamPanelH * scaleY - 1.0f;
   drawPanelGroup(canvas, 0.0f,        panelY + 1.0f, groupW,     groupH, "RHYTHM");
@@ -273,8 +299,8 @@ void EditorView::draw(visage::Canvas& canvas)
 
   // Thin border around step grid area
   canvas.setColor(SelectorBorderColor);
-  canvas.fill(0.0f, hdrH, kGridW * scaleX, 1.0f);
-  canvas.fill(kGridW * scaleX, hdrH, 1.0f, gridH);
+  canvas.fill(0.0f, presetH + hdrH, kGridW * scaleX, 1.0f);
+  canvas.fill(kGridW * scaleX, presetH + hdrH, 1.0f, gridH);
 }
 
 void EditorView::drawHeader(visage::Canvas& /*canvas*/)
@@ -347,9 +373,122 @@ void EditorView::updateKnobFromHost(int paramIdx, double value)
       if (mRootNoteSelector)
         mRootNoteSelector->setSelectedIndex(static_cast<int>(value) % 12);
       return;
+    case kMidiInputMode:
+      if (mMidiModeSelector)
+        mMidiModeSelector->setSelectedIndex(static_cast<int>(value));
+      return;
     default:
       return;
   }
   if (knob)
     knob->setValueFromHost(value);
+}
+
+void EditorView::updatePresetBrowser(int currentPresetIdx, bool dirty)
+{
+  if (mPresetBrowser)
+  {
+    mPresetBrowser->setCurrentPreset(currentPresetIdx);
+    mPresetBrowser->setDirty(dirty);
+  }
+}
+
+// ============================================================================
+// Keyboard shortcuts (Goal 5)
+// ============================================================================
+
+bool EditorView::keyDown(const visage::KeyEvent& e)
+{
+  const int stepCount = mStepGrid ? mStepGrid->getStepCount() : 16;
+  int sel = mStepGrid ? mStepGrid->getSelectedStep() : -1;
+
+  // Space → toggle transport (play/pause)
+  if (e.key_code == visage::KeyEvent::kSpace)
+  {
+    if (mTransportBar)
+      mTransportBar->onPlayPause().callback();
+    return true;
+  }
+
+  // 1–7 → switch generation mode
+  if (e.key_code >= '1' && e.key_code <= '7')
+  {
+    int mode = e.key_code - '1';
+    mSetParam(kGenMode, static_cast<double>(mode));
+    if (mGenModeSelector)
+      mGenModeSelector->setSelectedIndex(mode);
+    return true;
+  }
+
+  // Arrow keys — move selection
+  if (e.key_code == visage::KeyEvent::kLeftArrow)
+  {
+    if (sel <= 0) sel = stepCount - 1;
+    else          sel = sel - 1;
+    if (mStepGrid) mStepGrid->setSelectedStep(sel);
+    return true;
+  }
+  if (e.key_code == visage::KeyEvent::kRightArrow)
+  {
+    sel = (sel < 0) ? 0 : (sel + 1) % stepCount;
+    if (mStepGrid) mStepGrid->setSelectedStep(sel);
+    return true;
+  }
+
+  // Up/Down — velocity ±10% on selected step
+  if (e.key_code == visage::KeyEvent::kUpArrow && sel >= 0)
+  {
+    if (mOnStepVelocityChanged)
+      mOnStepVelocityChanged(sel, 0.1);  // relative hint; plugin layer can interpret
+    return true;
+  }
+  if (e.key_code == visage::KeyEvent::kDownArrow && sel >= 0)
+  {
+    if (mOnStepVelocityChanged)
+      mOnStepVelocityChanged(sel, -0.1);
+    return true;
+  }
+
+  // Delete / Backspace → clear selected step
+  if ((e.key_code == visage::KeyEvent::kDelete ||
+       e.key_code == visage::KeyEvent::kBackspace) && sel >= 0)
+  {
+    if (mOnStepActiveChanged)
+      mOnStepActiveChanged(sel, false);
+    if (mStepGrid)
+      mStepGrid->setStepActive(sel, false);
+    return true;
+  }
+
+  // A → toggle accent on selected step
+  if ((e.key_code == 'A' || e.key_code == 'a') && sel >= 0)
+  {
+    if (mOnStepAccentToggled)
+      mOnStepAccentToggled(sel, true);
+    return true;
+  }
+
+  // R → randomize (re-trigger generation with new seed)
+  if (e.key_code == 'R' || e.key_code == 'r')
+  {
+    double curSeed = mGetParam(kFractalSeed);
+    mSetParam(kFractalSeed, std::fmod(curSeed + 1.0, 99999.0));
+    return true;
+  }
+
+  // Ctrl+C / Cmd+C → copy pattern
+  if ((e.key_code == 'C' || e.key_code == 'c') && e.isControlDown())
+  {
+    if (mOnCopyPattern) mOnCopyPattern();
+    return true;
+  }
+
+  // E → export MIDI
+  if (e.key_code == 'E' || e.key_code == 'e')
+  {
+    if (mOnExportMidi) mOnExportMidi();
+    return true;
+  }
+
+  return false;
 }

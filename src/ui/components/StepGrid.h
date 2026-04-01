@@ -42,6 +42,10 @@ public:
   /// Trigger the flash animation for a step (called when it fires).
   void triggerStepFlash(int step);
 
+  /// Set the selected step (keyboard navigation). -1 = no selection.
+  void setSelectedStep(int step);
+  int  getSelectedStep() const { return mSelectedStep; }
+
   // -----------------------------------------------------------------------
   // Callbacks
   // -----------------------------------------------------------------------
@@ -61,6 +65,7 @@ public:
 private:
   int mStepCount    = 16;
   int mPlayheadStep = -1;
+  int mSelectedStep = -1;  // -1 = no selection
 
   std::array<StepCell, MAX_STEPS> mCells;
 

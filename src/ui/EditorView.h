@@ -7,6 +7,7 @@
 #include "components/ParameterKnob.h"
 #include "components/ModeSelector.h"
 #include "components/TransportBar.h"
+#include "components/PresetBrowser.h"
 #include "../dsp/SequencerEngine.h"
 #include <memory>
 #include <functional>
@@ -15,10 +16,11 @@
 /// Owns all UI sub-components and wires them to the plugin parameters.
 ///
 /// Layout (900 × 600):
-///   - Header bar (0, 0, 900, 48): title + mode/scale/root selectors
-///   - Step grid (0, 48, 600, 300): step sequencer cells
-///   - Parameter panel (0, 348, 900, 212): knobs for all parameters
-///   - Transport bar (0, 560, 900, 40): play/stop/reset
+///   - Preset bar  (0,   0, 900,  28): preset browser
+///   - Header bar  (0,  28, 900,  48): title + mode/scale/root selectors
+///   - Step grid   (0,  76, 600, 300): step sequencer cells
+///   - Parameter panel (0, 376, 900, 184): knobs for all parameters
+///   - Transport bar   (0, 560, 900,  40): play/stop/reset
 class EditorView : public visage::Frame
 {
 public:
@@ -29,6 +31,7 @@ public:
 
   void draw(visage::Canvas& canvas) override;
   void resized() override;
+  bool keyDown(const visage::KeyEvent& e) override;
 
   // -----------------------------------------------------------------------
   // Runtime updates from the audio thread (called from OnIdle)
@@ -47,13 +50,17 @@ public:
   /// Does NOT fire the onValueChange callback back to the engine.
   void updateKnobFromHost(int paramIdx, double value);
 
+  /// Update preset browser from host (called every OnIdle tick).
+  void updatePresetBrowser(int currentPresetIdx, bool dirty);
+
   // -----------------------------------------------------------------------
   // Layout constants (matches 900×600 default size)
   // -----------------------------------------------------------------------
+  static constexpr float kPresetBarH  = 28.0f;
   static constexpr float kHeaderH     = 48.0f;
   static constexpr float kGridW       = 600.0f;
   static constexpr float kGridH       = 300.0f;
-  static constexpr float kParamPanelH = 212.0f;
+  static constexpr float kParamPanelH = 184.0f;
   static constexpr float kTransportH  = 40.0f;
 
 private:
@@ -70,12 +77,25 @@ public:
   void setOnStepProbabilityChanged(std::function<void(int, double)> cb) { mOnStepProbabilityChanged = std::move(cb); }
   void setOnStepAccentToggled(std::function<void(int, bool)> cb) { mOnStepAccentToggled = std::move(cb); }
 
+  /// Callback: fired when the user selects a preset via the browser.
+  std::function<void(int)> mOnPresetSelected;
+
+  /// Callback: fired when the user requests a pattern export.
+  std::function<void()> mOnExportMidi;
+
+  /// Callback: fired when the user requests pattern copy (Ctrl+C).
+  std::function<void()> mOnCopyPattern;
+
 private:
+
+  // Preset browser
+  std::unique_ptr<PresetBrowser> mPresetBrowser;
 
   // Header widgets
   std::unique_ptr<ModeSelector> mGenModeSelector;
   std::unique_ptr<ModeSelector> mScaleModeSelector;
   std::unique_ptr<ModeSelector> mRootNoteSelector;
+  std::unique_ptr<ModeSelector> mMidiModeSelector;
 
   // Step grid
   std::unique_ptr<StepGrid> mStepGrid;

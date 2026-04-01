@@ -87,6 +87,19 @@ void StepGrid::triggerStepFlash(int step)
     mCells[step].triggerFlash();
 }
 
+void StepGrid::setSelectedStep(int step)
+{
+  // Clear old selection highlight
+  if (mSelectedStep >= 0 && mSelectedStep < MAX_STEPS)
+    mCells[mSelectedStep].setSelected(false);
+
+  mSelectedStep = step;
+
+  // Apply new selection highlight
+  if (mSelectedStep >= 0 && mSelectedStep < MAX_STEPS)
+    mCells[mSelectedStep].setSelected(true);
+}
+
 void StepGrid::layoutCells()
 {
   if (mStepCount <= 0 || width() <= 0 || height() <= 0)

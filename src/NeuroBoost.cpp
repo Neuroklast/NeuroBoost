@@ -4,6 +4,8 @@
 #include "visage_utils/dimension.h"
 #include <cmath>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,6 +38,8 @@ NeuroBoost::NeuroBoost(const InstanceInfo& info)
   GetParam(kVelocityCurve)->InitDouble("Velocity Curve", 1.0, 0.1, 4.0, 0.01);
   GetParam(kOctaveLow)->InitInt("Octave Low", 3, 0, 8);
   GetParam(kOctaveHigh)->InitInt("Octave High", 5, 0, 8);
+  GetParam(kMidiInputMode)->InitEnum("MIDI Input Mode", 0,
+    { "Off", "Thru", "Transpose", "Trigger", "Gate", "Thru+Generate" });
 
   // Initialise engine defaults from parameters
   mEngine.setSampleRate(44100.0);
@@ -64,7 +68,8 @@ NeuroBoost::NeuroBoost(const InstanceInfo& info)
       0.0,                                                 // kMutationRate
       1.0,                                                 // kVelocityCurve
       3.0,                                                 // kOctaveLow
-      5.0                                                  // kOctaveHigh
+      5.0,                                                 // kOctaveHigh
+      0.0                                                  // kMidiInputMode (Off)
     );
   }
 }
@@ -92,6 +97,55 @@ void NeuroBoost::sendPanicNoteOffs()
   }
 }
 
+void NeuroBoost::ProcessMidiMsg(const IMidiMsg& msg)
+{
+  mMidiQueue.Add(msg);
+}
+
+void NeuroBoost::handleMidiInput(const IMidiMsg& msg)
+{
+  const MidiInputMode mode =
+    static_cast<MidiInputMode>(static_cast<int>(GetParam(kMidiInputMode)->Value()));
+
+  const bool isNoteOn  = (msg.StatusMsg() == IMidiMsg::kNoteOn  && msg.Velocity() > 0);
+  const bool isNoteOff = (msg.StatusMsg() == IMidiMsg::kNoteOff)
+                       || (msg.StatusMsg() == IMidiMsg::kNoteOn && msg.Velocity() == 0);
+
+  // Thru / ThruAndGenerate: pass the message through unchanged
+  if (mode == MidiInputMode::Thru || mode == MidiInputMode::ThruAndGenerate)
+    SendMidiMsg(msg);
+
+  // Off: nothing further
+  if (mode == MidiInputMode::Off)
+    return;
+
+  if (isNoteOn)
+  {
+    mLastInputNote = msg.NoteNumber();
+
+    if (mode == MidiInputMode::Transpose || mode == MidiInputMode::ThruAndGenerate)
+      mEngine.setTransposeOffset(mLastInputNote - 60); // C4 = centre
+
+    if (mode == MidiInputMode::Trigger)
+      mEngine.resetPlayhead();
+
+    if (mode == MidiInputMode::Gate)
+    {
+      ++mHeldNoteCount;
+    }
+  }
+  else if (isNoteOff)
+  {
+    if (mode == MidiInputMode::Gate)
+    {
+      --mHeldNoteCount;
+      if (mHeldNoteCount < 0) mHeldNoteCount = 0;
+      if (mHeldNoteCount == 0)
+        sendPanicNoteOffs();
+    }
+  }
+}
+
 void NeuroBoost::OnIdle()
 {
   // Poll playhead position updates from the audio thread and update UI
@@ -110,11 +164,17 @@ void NeuroBoost::OnIdle()
   {
     for (int i = 0; i < kNumParams; ++i)
       mEditorView->updateKnobFromHost(i, GetParam(i)->Value());
+
+    // Update preset browser (poll current preset index from host)
+    mEditorView->updatePresetBrowser(GetCurrentPresetIdx(), mPresetDirty);
   }
 }
 
 void NeuroBoost::OnParamChange(int paramIdx)
 {
+  // Any parameter change marks the preset as modified
+  mPresetDirty = true;
+
   switch (paramIdx)
   {
     case kStepCount:
@@ -186,6 +246,14 @@ void NeuroBoost::OnParamChange(int paramIdx)
         static_cast<int>(GetParam(kOctaveHigh)->Value()));
       break;
 
+    case kMidiInputMode:
+      // Mode change: reset MIDI state
+      mHeldNoteCount = 0;
+      if (static_cast<MidiInputMode>(static_cast<int>(GetParam(kMidiInputMode)->Value()))
+          != MidiInputMode::Transpose)
+        mEngine.setTransposeOffset(0);
+      break;
+
     default:
       break;
   }
@@ -224,6 +292,29 @@ void* NeuroBoost::OpenWindow(void* pParent)
   mEditorView->setOnStepAccentToggled([this](int step, bool accent) {
     mEngine.setStepAccent(step, accent);
   });
+
+  // Wire preset browser
+  {
+    // Populate preset names
+    auto& browser = mEditorView->mOnPresetSelected;
+    browser = [this](int idx) {
+      RestorePreset(idx);
+      mPresetDirty = false;
+    };
+
+    // Populate preset names in the browser widget
+    if (mEditorView)
+    {
+      std::vector<std::string> names;
+      for (int i = 0; i < NPresets(); ++i)
+      {
+        const char* pn = GetPresetName(i);
+        names.push_back(pn ? pn : "Preset");
+      }
+      if (mEditorView->mPresetBrowser)
+        mEditorView->mPresetBrowser->setPresetNames(std::move(names));
+    }
+  }
 
   mWindow = visage::createPluginWindow(
     visage::Dimension::logicalPixels(mEditor->width()),
@@ -268,31 +359,48 @@ void NeuroBoost::CloseWindow()
 
 void NeuroBoost::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
+  // Drain incoming MIDI queue (realtime-safe: IMidiQueue uses fixed-size ring buffer)
+  while (!mMidiQueue.Empty())
+  {
+    IMidiMsg msg = mMidiQueue.Peek();
+    if (msg.mOffset >= nFrames) break;
+    handleMidiInput(msg);
+    mMidiQueue.Remove();
+  }
+
   // Get host transport info
   ITimeInfo timeInfo;
   GetTimeInfo(timeInfo);
 
-  // Update sequencer engine
-  mEngine.processBlock(timeInfo.mPPQPos, timeInfo.mTempo,
-                       timeInfo.mTransportIsPlaying, nFrames, GetSampleRate());
+  // Gate mode: only run the engine while at least one MIDI note is held
+  const MidiInputMode midiMode =
+    static_cast<MidiInputMode>(static_cast<int>(GetParam(kMidiInputMode)->Value()));
+  const bool gateOpen = (midiMode != MidiInputMode::Gate) || (mHeldNoteCount > 0);
 
-  // Send MIDI Note-Ons
-  for (int i = 0; i < mEngine.getOutputNoteCount(); ++i)
+  if (gateOpen)
   {
-    const MidiNote& note = mEngine.getOutputNotes()[i];
-    IMidiMsg msg;
-    msg.MakeNoteOnMsg(note.pitch, note.velocity,
-                      note.sampleOffset, note.channel - 1);
-    SendMidiMsg(msg);
-  }
+    // Update sequencer engine
+    mEngine.processBlock(timeInfo.mPPQPos, timeInfo.mTempo,
+                         timeInfo.mTransportIsPlaying, nFrames, GetSampleRate());
 
-  // Send MIDI Note-Offs
-  for (int i = 0; i < mEngine.getNoteOffCount(); ++i)
-  {
-    const MidiNote& off = mEngine.getNoteOffNotes()[i];
-    IMidiMsg msg;
-    msg.MakeNoteOffMsg(off.pitch, off.sampleOffset, off.channel - 1);
-    SendMidiMsg(msg);
+    // Send MIDI Note-Ons
+    for (int i = 0; i < mEngine.getOutputNoteCount(); ++i)
+    {
+      const MidiNote& note = mEngine.getOutputNotes()[i];
+      IMidiMsg msg;
+      msg.MakeNoteOnMsg(note.pitch, note.velocity,
+                        note.sampleOffset, note.channel - 1);
+      SendMidiMsg(msg);
+    }
+
+    // Send MIDI Note-Offs
+    for (int i = 0; i < mEngine.getNoteOffCount(); ++i)
+    {
+      const MidiNote& off = mEngine.getNoteOffNotes()[i];
+      IMidiMsg msg;
+      msg.MakeNoteOffMsg(off.pitch, off.sampleOffset, off.channel - 1);
+      SendMidiMsg(msg);
+    }
   }
 
   // Push playhead step to UI queue (non-blocking; drop if full)
@@ -312,7 +420,7 @@ void NeuroBoost::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 
 bool NeuroBoost::SerializeState(iplug::IByteChunk& chunk) const
 {
-  uint8_t version = 1;
+  uint8_t version = 2;
   chunk.Put(&version);
 
   for (int i = 0; i < kNumParams; ++i)
@@ -385,15 +493,20 @@ int NeuroBoost::UnserializeState(const iplug::IByteChunk& chunk, int startPos)
 {
   uint8_t version = 0;
   startPos = chunk.Get(&version, startPos);
-  if (version != 1)
+  if (version < 1 || version > 2)
     return startPos;
 
-  for (int i = 0; i < kNumParams; ++i)
+  // v1 had kNumParams-1 (15) parameters; v2 adds kMidiInputMode (16th)
+  const int storedParamCount = (version >= 2) ? kNumParams : (kNumParams - 1);
+  for (int i = 0; i < storedParamCount; ++i)
   {
     double val = 0.0;
     startPos = chunk.Get(&val, startPos);
     GetParam(i)->Set(val);
   }
+  // If upgrading from v1, default the new param
+  if (version < 2)
+    GetParam(kMidiInputMode)->Set(0.0);
 
   mEngine.setStepCount(static_cast<int>(GetParam(kStepCount)->Value()));
   mEngine.setGenerationMode(
