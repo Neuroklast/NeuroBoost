@@ -833,6 +833,12 @@ static void testAlphaDeterminismAllModes();
 static void testAlphaNoteOffCompleteness();
 static void testAlphaTransportCycle();
 
+// Forward declarations for Sprint 7 tests
+static void testMidiInputTranspose();
+static void testResetPlayhead();
+static void testMidiExport();
+static void testPresetBrowser();
+
 int main()
 {
   std::cout << "NeuroBoost Sequencer Tests\n";
@@ -1951,6 +1957,7 @@ static void testMidiInputTranspose()
     eng.setEuclideanParams(4, 0);  // all steps active
     eng.setGlobalDensity(1.0);
     eng.setScale(ScaleMode::Chromatic, 60);
+    eng.setOctaveRange(0, 10);  // wide range so transpose doesn't get clamped
     eng.setTransposeOffset(0);
     eng.reset();
 

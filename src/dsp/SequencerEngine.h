@@ -26,6 +26,7 @@ public:
 
   // Clamps to [1, MAX_STEPS].
   void setStepCount(int steps);
+  int  getStepCount() const { return mStepCount; }
 
   void setScale(ScaleMode mode, int rootNote);
   void setEuclideanParams(int hits, int rotation);
