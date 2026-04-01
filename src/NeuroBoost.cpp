@@ -7,6 +7,14 @@
 #include <string>
 #include <vector>
 
+// iPlug2 types used in the implementation
+using iplug::Config;
+using iplug::ITimeInfo;
+using iplug::IEditorDelegate;
+
+// MakeConfig is a free function from IPlug_include_in_plug_src.h
+using iplug::MakeConfig;
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif

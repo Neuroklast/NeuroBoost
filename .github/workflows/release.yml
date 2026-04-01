@@ -49,27 +49,23 @@ jobs:
       run: |
         set -e
         mkdir -p deps
-        cd deps
-        git clone https://github.com/iPlug2/iPlug2.git
-        cd iPlug2
+        git clone https://github.com/iPlug2/iPlug2.git deps/iPlug2
+        cd deps/iPlug2
         git checkout 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
-        git submodule update --init --recursive Dependencies/IPlug/VST3_SDK || true
+        cd ../..
 
-        # Verify VST3 SDK header; fall back to direct clone if submodule failed
-        VST3_SDK_DIR="Dependencies/IPlug/VST3_SDK"
+        # Clone VST3 SDK directly — more reliable than submodule init
+        VST3_SDK_DIR="deps/iPlug2/Dependencies/IPlug/VST3_SDK"
+        mkdir -p "$(dirname "$VST3_SDK_DIR")"
+        rm -rf "$VST3_SDK_DIR"
+        git clone --branch v3.7.7_build_19 --depth 1 \
+          https://github.com/steinbergmedia/vst3sdk.git "$VST3_SDK_DIR"
+        git -C "$VST3_SDK_DIR" submodule update --init --recursive
+
+        # Verify
         VST3_HEADER="$VST3_SDK_DIR/pluginterfaces/vst/ivstaudioprocessor.h"
         if [ ! -f "$VST3_HEADER" ]; then
-          echo "::warning::VST3_SDK submodule failed or incomplete — cloning directly from steinbergmedia/vst3sdk"
-          rm -rf "$VST3_SDK_DIR"
-          git clone --branch v3.7.7_build_19 --depth 1 https://github.com/steinbergmedia/vst3sdk.git "$VST3_SDK_DIR"
-          cd "$VST3_SDK_DIR"
-          git submodule update --init --recursive
-          cd ../..
-        fi
-
-        # Final verification
-        if [ ! -f "$VST3_HEADER" ]; then
-          echo "::error::VST3 SDK header still not found after fallback clone: $VST3_HEADER"
+          echo "::error::VST3 SDK header not found: $VST3_HEADER"
           exit 1
         fi
         echo "✅ VST3 SDK ready at $VST3_HEADER"
@@ -132,6 +128,11 @@ jobs:
         fi
         echo "✅ Visage library found: $VISAGE_LIB"
 
+    # ── Setup MSVC (Windows) ──────────────────────────────────────────────
+    - name: Setup MSVC Developer Environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+
     # ── Configure NeuroBoost ────────────────────────────────────────────────
     - name: Configure NeuroBoost
       shell: bash
@@ -139,23 +140,12 @@ jobs:
         set -e
         mkdir -p build
         cd build
-        # On Windows use NMake Makefiles for single-config, predictable output paths
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          cmake -G "NMake Makefiles" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_VST3=ON \
-                -DBUILD_DSP_TEST=OFF \
-                -DBUILD_UI_TEST=OFF \
-                -DBUILD_STANDALONE=OFF \
-                ..
-        else
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_VST3=ON \
-                -DBUILD_DSP_TEST=OFF \
-                -DBUILD_UI_TEST=OFF \
-                -DBUILD_STANDALONE=OFF \
-                ..
-        fi
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_VST3=ON \
+              -DBUILD_DSP_TEST=OFF \
+              -DBUILD_UI_TEST=OFF \
+              -DBUILD_STANDALONE=OFF \
+              ..
 
     # ── Build NeuroBoost ────────────────────────────────────────────────────
     - name: Build NeuroBoost VST3
@@ -276,6 +266,18 @@ jobs:
 
     - name: List downloaded artifacts
       run: ls -laR release-artifacts/
+
+    - name: Verify release artifacts are not empty
+      shell: bash
+      run: |
+        set -e
+        ARTIFACT_COUNT=$(find release-artifacts -type f 2>/dev/null | wc -l | tr -d '[:space:]')
+        if [ "$ARTIFACT_COUNT" = "0" ]; then
+          echo "::error::No files found in release-artifacts/ — build jobs failed or uploaded no artifacts"
+          exit 1
+        fi
+        echo "✅ Found $ARTIFACT_COUNT release artifact(s):"
+        find release-artifacts -type f
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
