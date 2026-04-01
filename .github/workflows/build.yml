@@ -66,6 +66,17 @@ jobs:
           ./build/bin/test_ui_structure
         fi
 
+    - name: Show UI structure in job summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f tests/screenshots/ui_structure_dump.txt ]; then
+          echo '## UI Structure Dump' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat tests/screenshots/ui_structure_dump.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        fi
+
     - name: Upload UI structure artifacts
       if: always()
       uses: actions/upload-artifact@v4

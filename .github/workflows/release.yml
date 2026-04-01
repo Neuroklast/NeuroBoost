@@ -1,0 +1,155 @@
+name: Release VST3
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-vst3:
+    name: Build VST3 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # ── Linux dependencies ──────────────────────────────────────────────────
+    - name: Setup dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake git \
+          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+          libgl1-mesa-dev libfreetype6-dev libharfbuzz-dev \
+          libasound2-dev libgtk-3-dev pkg-config
+
+    # ── macOS dependencies ──────────────────────────────────────────────────
+    - name: Setup dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake || true
+
+    # ── Windows dependencies ────────────────────────────────────────────────
+    - name: Setup dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+
+    # ── Clone iPlug2 + VST3 SDK ─────────────────────────────────────────────
+    - name: Clone iPlug2
+      shell: bash
+      run: |
+        mkdir -p deps
+        cd deps
+        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+        cd iPlug2
+        git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
+
+    # ── Clone Visage ────────────────────────────────────────────────────────
+    - name: Clone Visage
+      shell: bash
+      run: |
+        cd deps
+        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/VitalAudio/visage.git
+
+    # ── Build Visage ────────────────────────────────────────────────────────
+    - name: Build Visage
+      shell: bash
+      run: |
+        cd deps/visage
+        mkdir -p build
+        cd build
+        cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
+        cmake --build . --config Release --parallel 2
+
+    # ── Configure NeuroBoost ────────────────────────────────────────────────
+    - name: Configure NeuroBoost
+      shell: bash
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_VST3=ON \
+              -DBUILD_DSP_TEST=OFF \
+              -DBUILD_UI_TEST=OFF \
+              -DBUILD_STANDALONE=OFF \
+              ..
+
+    # ── Build NeuroBoost ────────────────────────────────────────────────────
+    - name: Build NeuroBoost VST3
+      shell: bash
+      run: |
+        cd build
+        cmake --build . --config Release --parallel 2
+
+    # ── Package artifact ────────────────────────────────────────────────────
+    - name: Package VST3 artifact (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        mkdir -p dist
+        # Linux VST3 output is a shared library (.so); fall back to .vst3 bundle name
+        if [ -f build/vst3/NeuroBoost.so ]; then
+          cp build/vst3/NeuroBoost.so dist/NeuroBoost-linux.so
+        elif [ -d build/vst3/NeuroBoost.vst3 ] || [ -f build/vst3/NeuroBoost.vst3 ]; then
+          cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-linux.vst3
+        else
+          echo "ERROR: No VST3 output found in build/vst3/" && ls -la build/vst3/ && exit 1
+        fi
+        ls -la dist/
+
+    - name: Package VST3 artifact (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        mkdir -p dist
+        cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-macos.vst3
+        ls -la dist/
+
+    - name: Package VST3 artifact (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        mkdir -p dist
+        cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-windows.vst3
+        ls -la dist/
+
+    # ── Upload per-platform artifact ────────────────────────────────────────
+    - name: Upload VST3 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: NeuroBoost-vst3-${{ matrix.os }}
+        path: dist/
+        if-no-files-found: error
+
+  # ── Create GitHub Release and attach all artifacts ─────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: build-vst3
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download all VST3 artifacts
+      uses: actions/download-artifact@v4.1.3
+      with:
+        path: release-artifacts/
+
+    - name: List downloaded artifacts
+      run: ls -laR release-artifacts/
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: NeuroBoost ${{ github.ref_name }}
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+        files: release-artifacts/**/*
