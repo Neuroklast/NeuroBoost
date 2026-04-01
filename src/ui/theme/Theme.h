@@ -7,12 +7,14 @@
 #include <string>
 
 // Create a Font from the bundled Lato typeface.
-// NEUROBOOST_FONT_PATH must be defined (see CMakeLists.txt).
+// NEUROBOOST_FONT_PATH is defined in CMakeLists.txt when Visage is available.
+// If undefined, returns an empty Font (text won't render, but won't crash).
 inline visage::Font makeFont(float size) {
 #ifdef NEUROBOOST_FONT_PATH
   static const std::string kFontPath = NEUROBOOST_FONT_PATH;
   return visage::Font(size, kFontPath);
 #else
+  #pragma message("NEUROBOOST_FONT_PATH not defined — UI text will not render.")
   return visage::Font();
 #endif
 }

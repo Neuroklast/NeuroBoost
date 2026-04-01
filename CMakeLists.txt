@@ -467,8 +467,18 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${COMMON_DEFINITIONS}
             VST3_API
             IPLUG_VST3
-            NEUROBOOST_FONT_PATH="${VISAGE_ROOT}/visage_graphics/fonts/Lato-Regular.ttf"
         )
+
+        # Define the embedded Lato font path for UI text rendering
+        set(_lato_font_path "${VISAGE_ROOT}/visage_graphics/fonts/Lato-Regular.ttf")
+        if(EXISTS "${_lato_font_path}")
+            target_compile_definitions(NeuroBoost_VST3 PRIVATE
+                NEUROBOOST_FONT_PATH="${_lato_font_path}")
+            message(STATUS "Font path: ${_lato_font_path}")
+        else()
+            message(WARNING "Lato-Regular.ttf not found at ${_lato_font_path}. "
+                "UI text will not render. Ensure Visage is cloned at VISAGE_ROOT.")
+        endif()
         
         # MSVC-specific options
         if(MSVC)
