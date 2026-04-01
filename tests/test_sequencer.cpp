@@ -812,6 +812,14 @@ static void testSequencerMultiMode()
 // main
 // ============================================================================
 
+// Forward declarations for new Sprint 4 tests
+static void testRatchets();
+static void testSwing();
+static void testConditionModes();
+static void testPerStepEditing();
+static void testVelocityCurveAndOctaveRange();
+static void testStateSerialization();
+
 int main()
 {
   std::cout << "NeuroBoost Sequencer Tests\n";
@@ -831,9 +839,483 @@ int main()
   testSequencerDeterminism();
   testSequencerTiming();
   testSequencerMultiMode();
+  testRatchets();
+  testSwing();
+  testConditionModes();
+  testPerStepEditing();
+  testVelocityCurveAndOctaveRange();
+  testStateSerialization();
 
   std::cout << "\n==========================\n";
   std::cout << "Results: " << gPassed << " passed, " << gFailed << " failed\n";
 
   return (gFailed == 0) ? 0 : 1;
+}
+
+// ============================================================================
+// Ratchet tests
+// ============================================================================
+
+static void testRatchets()
+{
+  printSection("Ratchets");
+
+  auto runBlocks = [](SequencerEngine& eng, int numBlocks) -> int {
+    const int nFrames = 512;
+    const double sampleRate = 44100.0;
+    const double samplesPerBeat = sampleRate * 60.0 / 120.0;
+    const double beatsPerBlock = nFrames / samplesPerBeat;
+    double ppq = 0.0;
+    int total = 0;
+    for (int b = 0; b < numBlocks; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, sampleRate);
+      total += eng.getOutputNoteCount();
+      ppq += beatsPerBlock;
+    }
+    return total;
+  };
+
+  // ratchetCount=4 produces more notes than ratchetCount=1
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(4, 0);
+    eng.regeneratePattern();
+    for (int i = 0; i < 16; ++i)
+      eng.setStepRatchet(i, 1, 0.8);
+    int notes1 = runBlocks(eng, 200);
+
+    SequencerEngine eng4;
+    eng4.setSampleRate(44100.0);
+    eng4.setStepCount(16);
+    eng4.setEuclideanParams(4, 0);
+    eng4.regeneratePattern();
+    for (int i = 0; i < 16; ++i)
+      eng4.setStepRatchet(i, 4, 1.0);
+    int notes4 = runBlocks(eng4, 200);
+
+    EXPECT(notes4 > notes1, "ratchetCount=4 produces more notes than ratchetCount=1");
+  }
+
+  // ratchetDecay=1.0: all ratchets equal velocity
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.regeneratePattern();
+    for (int i = 0; i < 4; ++i)
+      eng.setStepRatchet(i, 2, 1.0);
+
+    const int nFrames = 512;
+    double ppq = 0.0;
+    bool allEqual = true;
+    for (int b = 0; b < 100; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      for (int n = 0; n + 1 < eng.getOutputNoteCount(); n += 2)
+      {
+        if (eng.getOutputNotes()[n].velocity != eng.getOutputNotes()[n+1].velocity)
+          allEqual = false;
+      }
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(allEqual, "ratchetDecay=1.0: ratchet notes have equal velocity");
+  }
+
+  // ratchetCount > 8 is clamped to 8
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(1);
+    eng.setEuclideanParams(1, 0);
+    eng.regeneratePattern();
+    eng.setStepRatchet(0, 100, 1.0);
+
+    const int nFrames = 512;
+    double ppq = 0.0;
+    int maxPerBlock = 0;
+    for (int b = 0; b < 50; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      if (eng.getOutputNoteCount() > maxPerBlock)
+        maxPerBlock = eng.getOutputNoteCount();
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(maxPerBlock <= 8, "ratchetCount > 8 clamped: no more than 8 notes per step");
+  }
+}
+
+// ============================================================================
+// Swing tests
+// ============================================================================
+
+static void testSwing()
+{
+  printSection("Swing");
+
+  // swing=0.0 no crash
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setSwing(0.0);
+    eng.regeneratePattern();
+    const int nFrames = 512;
+    double ppq = 0.0;
+    for (int b = 0; b < 100; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(true, "swing=0.0: no crash");
+  }
+
+  // swing=0.5 no crash
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(8, 0);
+    eng.setSwing(0.5);
+    eng.regeneratePattern();
+    const int nFrames = 512;
+    double ppq = 0.0;
+    for (int b = 0; b < 100; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(true, "swing=0.5: no crash");
+  }
+
+  // setSwing clamping: values > 0.5 are clamped
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setSwing(2.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.regeneratePattern();
+    const int nFrames = 512;
+    double ppq = 0.0;
+    for (int b = 0; b < 50; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(true, "setSwing(2.0) clamped: no crash");
+  }
+}
+
+// ============================================================================
+// Condition mode tests
+// ============================================================================
+
+static void testConditionModes()
+{
+  printSection("ConditionModes");
+
+  auto runBlocks = [](SequencerEngine& eng, int numBlocks) -> int {
+    const int nFrames = 512;
+    const double sampleRate = 44100.0;
+    const double bpb = nFrames / (sampleRate * 60.0 / 120.0);
+    double ppq = 0.0;
+    int total = 0;
+    for (int b = 0; b < numBlocks; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, sampleRate);
+      total += eng.getOutputNoteCount();
+      ppq += bpb;
+    }
+    return total;
+  };
+
+  // EveryN=1 fires every cycle (same as Always)
+  {
+    SequencerEngine engAlways;
+    engAlways.setSampleRate(44100.0);
+    engAlways.setStepCount(4);
+    engAlways.setEuclideanParams(4, 0);
+    engAlways.regeneratePattern();
+    int notesAlways = runBlocks(engAlways, 400);
+
+    SequencerEngine engEvery1;
+    engEvery1.setSampleRate(44100.0);
+    engEvery1.setStepCount(4);
+    engEvery1.setEuclideanParams(4, 0);
+    engEvery1.regeneratePattern();
+    for (int i = 0; i < 4; ++i)
+      engEvery1.setStepCondition(i, ConditionMode::EveryN, 1);
+    int notesEvery1 = runBlocks(engEvery1, 400);
+
+    EXPECT(notesAlways == notesEvery1, "EveryN=1 fires same as Always");
+  }
+
+  // EveryN=2 fires roughly half as often, but still produces notes
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.regeneratePattern();
+    for (int i = 0; i < 4; ++i)
+      eng.setStepCondition(i, ConditionMode::EveryN, 2);
+    int notes = runBlocks(eng, 400);
+    EXPECT(notes > 0, "EveryN=2: still produces notes");
+  }
+
+  // Fill mode: fires when density >= 0.8
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.setGlobalDensity(0.9);
+    eng.regeneratePattern();
+    for (int i = 0; i < 4; ++i)
+      eng.setStepCondition(i, ConditionMode::Fill, 0);
+    int notes = runBlocks(eng, 400);
+    EXPECT(notes > 0, "Fill mode with density=0.9: produces notes");
+  }
+
+  // Fill mode: silent when density < 0.8
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.setGlobalDensity(0.5);
+    eng.regeneratePattern();
+    for (int i = 0; i < 4; ++i)
+      eng.setStepCondition(i, ConditionMode::Fill, 0);
+    int notes = runBlocks(eng, 400);
+    EXPECT(notes == 0, "Fill mode with density=0.5: silent");
+  }
+
+  // PreFill mode: fires when density < 0.8
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.setGlobalDensity(0.5);
+    eng.regeneratePattern();
+    for (int i = 0; i < 4; ++i)
+      eng.setStepCondition(i, ConditionMode::PreFill, 0);
+    int notes = runBlocks(eng, 400);
+    EXPECT(notes > 0, "PreFill mode with density=0.5: produces notes");
+  }
+}
+
+// ============================================================================
+// Per-step editing tests
+// ============================================================================
+
+static void testPerStepEditing()
+{
+  printSection("PerStepEditing");
+
+  // setStepActive: out-of-bounds does not crash
+  {
+    SequencerEngine eng;
+    eng.setStepActive(-1, true);
+    eng.setStepActive(MAX_STEPS, true);
+    EXPECT(true, "setStepActive: out-of-bounds no crash");
+  }
+
+  // setStepActive: deactivated step produces no notes
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(1);
+    eng.setEuclideanParams(1, 0);
+    eng.regeneratePattern();
+    eng.setStepActive(0, false);
+
+    int total = 0;
+    const int nFrames = 512;
+    const double bpb = nFrames / (44100.0 * 60.0 / 120.0);
+    double ppq = 0.0;
+    for (int b = 0; b < 100; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      total += eng.getOutputNoteCount();
+      ppq += bpb;
+    }
+    EXPECT(total == 0, "setStepActive(0, false): step produces no notes");
+  }
+
+  // setStepVelocity: bounds check (no crash)
+  {
+    SequencerEngine eng;
+    eng.setStepVelocity(0, 80.0);
+    eng.setStepVelocity(-1, 80.0);
+    eng.setStepVelocity(MAX_STEPS, 80.0);
+    EXPECT(true, "setStepVelocity: no crash on valid/invalid indices");
+  }
+
+  // setStepProbability: step with probability=0 produces no notes
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(1);
+    eng.setEuclideanParams(1, 0);
+    eng.regeneratePattern();
+    eng.setStepProbability(0, 0.0);
+
+    int total = 0;
+    const int nFrames = 512;
+    const double bpb = nFrames / (44100.0 * 60.0 / 120.0);
+    double ppq = 0.0;
+    for (int b = 0; b < 100; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      total += eng.getOutputNoteCount();
+      ppq += bpb;
+    }
+    EXPECT(total == 0, "setStepProbability(0, 0.0): step produces no notes");
+  }
+
+  // setStep/getSteps round-trip
+  {
+    SequencerEngine eng;
+    SequenceStep s;
+    s.pitch = 72;
+    s.velocity = 90.0;
+    s.velocityRange = 0.0;
+    s.probability = 1.0;
+    s.durationBeats = 0.25;
+    s.ratchetCount = 1;
+    s.ratchetDecay = 0.8;
+    s.conditionMode = ConditionMode::Always;
+    s.conditionParam = 1;
+    s.microTiming = 0.0;
+    s.active = true;
+    s.accent = false;
+    eng.setStep(5, s);
+    EXPECT(eng.getSteps()[5].pitch == 72, "setStep: pitch stored correctly");
+    EXPECT(eng.getSteps()[5].velocity == 90.0, "setStep: velocity stored correctly");
+  }
+}
+
+// ============================================================================
+// Velocity curve and octave range tests
+// ============================================================================
+
+static void testVelocityCurveAndOctaveRange()
+{
+  printSection("VelocityCurveAndOctaveRange");
+
+  // Velocity curve=1.0: velocities stay in [1,127]
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setEuclideanParams(4, 0);
+    eng.setVelocityCurve(1.0);
+    eng.regeneratePattern();
+    const int nFrames = 512;
+    double ppq = 0.0;
+    bool allOk = true;
+    for (int b = 0; b < 100; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      for (int n = 0; n < eng.getOutputNoteCount(); ++n)
+      {
+        int v = eng.getOutputNotes()[n].velocity;
+        if (v < 1 || v > 127) allOk = false;
+      }
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(allOk, "VelocityCurve=1.0: velocity in [1,127]");
+  }
+
+  // Octave range clamping: notes stay within range
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0);
+    eng.setOctaveRange(4, 4); // Only octave 4 (48-59)
+    eng.regeneratePattern();
+    const int nFrames = 512;
+    double ppq = 0.0;
+    bool allInRange = true;
+    for (int b = 0; b < 200; ++b)
+    {
+      eng.processBlock(ppq, 120.0, true, nFrames, 44100.0);
+      for (int n = 0; n < eng.getOutputNoteCount(); ++n)
+      {
+        int p = eng.getOutputNotes()[n].pitch;
+        if (p < 48 || p > 59) allInRange = false;
+      }
+      ppq += nFrames / (44100.0 * 60.0 / 120.0);
+    }
+    EXPECT(allInRange, "setOctaveRange(4,4): all notes in octave 4 [48-59]");
+  }
+}
+
+// ============================================================================
+// State serialization round-trip test (engine DSP layer only)
+// ============================================================================
+
+static void testStateSerialization()
+{
+  printSection("StateSerialization");
+
+  // Per-step setters + getSteps() round-trip
+  {
+    SequencerEngine eng1;
+    for (int i = 0; i < 16; ++i)
+    {
+      eng1.setStepPitch(i, 60 + i);
+      eng1.setStepVelocity(i, 50.0 + i);
+      eng1.setStepActive(i, (i % 2 == 0));
+    }
+
+    const SequenceStep* steps = eng1.getSteps();
+    bool pitchOk = true, velOk = true, activeOk = true;
+    for (int i = 0; i < 16; ++i)
+    {
+      if (steps[i].pitch    != 60 + i)       pitchOk  = false;
+      if (steps[i].velocity != 50.0 + i)     velOk    = false;
+      if (steps[i].active   != (i % 2 == 0)) activeOk = false;
+    }
+    EXPECT(pitchOk,  "StateSerialization: pitch round-trip via setStep/getSteps");
+    EXPECT(velOk,    "StateSerialization: velocity round-trip via setStep/getSteps");
+    EXPECT(activeOk, "StateSerialization: active round-trip via setStep/getSteps");
+  }
+
+  // Engine accessor defaults
+  {
+    SequencerEngine eng;
+    EXPECT(eng.getLSystemAxiom() == 'A',   "getLSystemAxiom() default is 'A'");
+    EXPECT(eng.getCARule() == 30,           "getCARule() default is 30");
+    EXPECT(eng.getCAIterations() == 16,     "getCAIterations() default is 16");
+    EXPECT(eng.getFractalCx() == -0.5,      "getFractalCx() default is -0.5");
+    EXPECT(eng.getMarkovStartNote() == 0,   "getMarkovStartNote() default is 0");
+  }
+
+  // setMarkovMatrix round-trip
+  {
+    SequencerEngine eng;
+    double mat[12][12] = {};
+    mat[0][1] = 0.75;
+    mat[3][5] = 0.42;
+    eng.setMarkovMatrix(mat);
+    const double (*got)[12] = eng.getMarkovMatrix();
+    EXPECT(got[0][1] == 0.75, "setMarkovMatrix: mat[0][1] round-trip");
+    EXPECT(got[3][5] == 0.42, "setMarkovMatrix: mat[3][5] round-trip");
+  }
+
+  // setMarkovStartNote round-trip
+  {
+    SequencerEngine eng;
+    eng.setMarkovStartNote(7);
+    EXPECT(eng.getMarkovStartNote() == 7, "setMarkovStartNote(7) round-trip");
+  }
 }

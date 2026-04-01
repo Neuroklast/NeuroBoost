@@ -5,6 +5,7 @@
 
 #include "../common/Constants.h"
 #include "../common/Types.h"
+#include "../common/Presets.h"
 #include "Algorithms.h"
 #include "NoteTracker.h"
 #include "TransportSync.h"
@@ -70,6 +71,55 @@ public:
   // Reset state (re-seeds RNG from stored seed, clears notes, resets step counter).
   void reset();
 
+  // ---- State access for serialization (UI thread only) ----
+  const SequenceStep* getSteps() const { return mSteps; }
+  void setStep(int index, const SequenceStep& step);
+
+  char getLSystemAxiom() const { return mLSystemAxiom; }
+  const char* getLSystemRuleA() const { return mLSystemRuleA; }
+  const char* getLSystemRuleB() const { return mLSystemRuleB; }
+  int getLSystemIterations() const { return mLSystemIterations; }
+
+  int getCARule() const { return mCARule; }
+  int getCAIterations() const { return mCAIterations; }
+
+  double getFractalCx() const { return mFractalCx; }
+  double getFractalCy() const { return mFractalCy; }
+  double getFractalZoom() const { return mFractalZoom; }
+  int getFractalMaxIter() const { return mFractalMaxIter; }
+  int getFractalThreshold() const { return mFractalThreshold; }
+
+  const double (*getMarkovMatrix() const)[12] { return mMarkovMatrix; }
+  int getMarkovStartNote() const { return mMarkovStartNote; }
+  void setMarkovMatrix(const double matrix[12][12]);
+  void setMarkovStartNote(int note) { mMarkovStartNote = note; }
+
+  // ---- Swing ----
+  void setSwing(double swing);
+
+  // ---- Mutation rate ----
+  void setMutationRate(double rate);
+
+  // ---- Velocity curve ----
+  void setVelocityCurve(double curve);
+
+  // ---- Octave range ----
+  void setOctaveRange(int low, int high);
+
+  // ---- Per-step editing ----
+  void setStepPitch(int index, int pitch);
+  void setStepVelocity(int index, double velocity);
+  void setStepProbability(int index, double probability);
+  void setStepDuration(int index, double durationBeats);
+  void setStepRatchet(int index, int count, double decay);
+  void setStepCondition(int index, ConditionMode mode, int param);
+  void setStepMicroTiming(int index, double offset);
+  void setStepActive(int index, bool active);
+  void setStepAccent(int index, bool accent);
+
+  // ---- Preset loading ----
+  void loadPreset(const PresetData& preset);
+
 private:
   // Fire notes for a single sequencer step.
   void generateStepNotes(int stepIndex, double stepBeat, int nFrames);
@@ -119,6 +169,16 @@ private:
   // Cellular Automata parameters
   int            mCARule;
   int            mCAIterations;
+
+  // Swing, mutation, velocity curve, octave range
+  double         mSwing;
+  double         mMutationRate;
+  double         mVelocityCurve;
+  int            mOctaveLow;
+  int            mOctaveHigh;
+
+  // Cycle counter (incremented each time mCurrentStep wraps to 0)
+  int            mCycleCount;
 
   // Output buffers
   MidiNote       mOutputNotes[MAX_POLYPHONY];

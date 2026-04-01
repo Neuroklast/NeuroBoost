@@ -60,9 +60,9 @@ void EditorView::buildWidgets()
   // -- Step grid --
   mStepGrid = std::make_unique<StepGrid>();
   mStepGrid->setStepCount(static_cast<int>(mGetParam(kStepCount)));
-  mStepGrid->onStepToggled() = [](int /*step*/, bool /*active*/) {
-    // Per-step active state is not yet a plugin parameter (Sprint 4 roadmap).
-    // The engine generates patterns algorithmically; steps are read-only here.
+  mStepGrid->onStepToggled() = [this](int step, bool active) {
+    if (mOnStepActiveChanged)
+      mOnStepActiveChanged(step, active);
   };
   addChild(mStepGrid.get());
 
