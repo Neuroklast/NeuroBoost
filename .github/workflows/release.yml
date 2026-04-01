@@ -111,7 +111,15 @@ jobs:
       shell: bash
       run: |
         mkdir -p dist
-        cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-macos.vst3
+        # Find the .vst3 bundle wherever CMake placed it
+        VST3_PATH=$(find build -name "NeuroBoost.vst3" -type d | head -n 1)
+        if [ -z "$VST3_PATH" ]; then
+          echo "ERROR: No NeuroBoost.vst3 bundle found under build/"
+          find build -name "*.vst3" -o -name "*.dylib" | head -20
+          exit 1
+        fi
+        echo "Found VST3 at: $VST3_PATH"
+        cp -r "$VST3_PATH" dist/NeuroBoost-macos.vst3
         ls -la dist/
 
     - name: Package VST3 artifact (Windows)
@@ -119,7 +127,14 @@ jobs:
       shell: bash
       run: |
         mkdir -p dist
-        cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-windows.vst3
+        VST3_PATH=$(find build -name "NeuroBoost.vst3" -type d | head -n 1)
+        if [ -z "$VST3_PATH" ]; then
+          echo "ERROR: No NeuroBoost.vst3 bundle found under build/"
+          find build -name "*.vst3" -o -name "*.dll" | head -20
+          exit 1
+        fi
+        echo "Found VST3 at: $VST3_PATH"
+        cp -r "$VST3_PATH" dist/NeuroBoost-windows.vst3
         ls -la dist/
 
     # ── Upload per-platform artifact ────────────────────────────────────────
