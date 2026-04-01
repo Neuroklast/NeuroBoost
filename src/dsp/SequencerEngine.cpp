@@ -37,6 +37,7 @@ SequencerEngine::SequencerEngine()
   , mVelocityCurve(1.0)
   , mOctaveLow(3)
   , mOctaveHigh(5)
+  , mTransposeOffset(0)
   , mCycleCount(0)
   , mOutputNoteCount(0)
   , mNoteOffCount(0)
@@ -376,6 +377,9 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
 
   int pitch = ScaleQuantizer::quantize(basePitch, mRootNote, mScaleMode);
 
+  // Apply MIDI transpose offset (after scale quantization, before octave clamp)
+  pitch += mTransposeOffset;
+
   // Octave range clamping
   int octaveLow  = mOctaveLow  * 12;
   int octaveHigh = (mOctaveHigh + 1) * 12 - 1;
@@ -531,4 +535,14 @@ void SequencerEngine::loadPreset(const PresetData& preset)
   if (preset.mode == GenerationMode::Markov)
     setMarkovPreset(preset.markovPreset);
   regeneratePattern();
+}
+
+void SequencerEngine::setTransposeOffset(int semitones)
+{
+  mTransposeOffset = semitones;
+}
+
+void SequencerEngine::resetPlayhead()
+{
+  mCurrentStep = 0;
 }

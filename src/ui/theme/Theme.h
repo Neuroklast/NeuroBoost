@@ -46,3 +46,11 @@ VISAGE_THEME_COLOR(StopColor, 0xffff4444);
 // Header / Selector
 VISAGE_THEME_COLOR(SelectorBgColor,     0xff222244);
 VISAGE_THEME_COLOR(SelectorBorderColor, 0xff4a9eff);
+
+// Step Selection (keyboard shortcut / click-select)
+VISAGE_THEME_COLOR(SelectedCellColor,   0xffffffff);  // White border for selected step
+
+// Preset Browser
+VISAGE_THEME_COLOR(PresetBgColor,       0xff111122);  // Preset bar background
+VISAGE_THEME_COLOR(PresetTextColor,     0xffdddddd);  // Preset name text
+VISAGE_THEME_COLOR(PresetDirtyColor,    0xffffaa00);  // Modified indicator (*)

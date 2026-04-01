@@ -43,6 +43,16 @@ void StepCell::draw(visage::Canvas& canvas)
     canvas.fill(w - kPad - 2.0f, kPad, 2.0f, h - kPad * 2.0f);    // right
   }
 
+  // Selection highlight: white border (overrides accent border)
+  if (mIsSelected)
+  {
+    canvas.setColor(SelectedCellColor);
+    canvas.fill(kPad,                   kPad,                   w - kPad * 2.0f, 2.0f);
+    canvas.fill(kPad,                   h - kPad - 2.0f,        w - kPad * 2.0f, 2.0f);
+    canvas.fill(kPad,                   kPad,                   2.0f,            h - kPad * 2.0f);
+    canvas.fill(w - kPad - 2.0f,        kPad,                   2.0f,            h - kPad * 2.0f);
+  }
+
   // Velocity bar (thin strip at bottom of active cells)
   if (mActive && mVelocity < 0.99f)
   {
@@ -175,6 +185,15 @@ void StepCell::setPlayhead(bool isPlayhead)
   if (mIsPlayhead != isPlayhead)
   {
     mIsPlayhead = isPlayhead;
+    redraw();
+  }
+}
+
+void StepCell::setSelected(bool selected)
+{
+  if (mIsSelected != selected)
+  {
+    mIsSelected = selected;
     redraw();
   }
 }

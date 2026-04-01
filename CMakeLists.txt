@@ -33,6 +33,7 @@ if(BUILD_DSP_TEST)
         ${CMAKE_SOURCE_DIR}/tests/test_sequencer.cpp
         ${CMAKE_SOURCE_DIR}/src/dsp/SequencerEngine.cpp
         ${CMAKE_SOURCE_DIR}/src/dsp/Algorithms.cpp
+        ${CMAKE_SOURCE_DIR}/src/common/MidiExport.cpp
     )
 
     target_include_directories(test_sequencer PRIVATE
@@ -40,6 +41,7 @@ if(BUILD_DSP_TEST)
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/common
         ${CMAKE_SOURCE_DIR}/src/dsp
+        ${CMAKE_SOURCE_DIR}/src/common
     )
 
     target_compile_definitions(test_sequencer PRIVATE
@@ -140,6 +142,8 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         # DSP
         ${CMAKE_SOURCE_DIR}/src/dsp/SequencerEngine.cpp
         ${CMAKE_SOURCE_DIR}/src/dsp/Algorithms.cpp
+        # Common
+        ${CMAKE_SOURCE_DIR}/src/common/MidiExport.cpp
         # UI
         ${CMAKE_SOURCE_DIR}/src/ui/EditorView.cpp
         ${CMAKE_SOURCE_DIR}/src/ui/components/ParameterKnob.cpp
@@ -147,6 +151,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         ${CMAKE_SOURCE_DIR}/src/ui/components/StepCell.cpp
         ${CMAKE_SOURCE_DIR}/src/ui/components/ModeSelector.cpp
         ${CMAKE_SOURCE_DIR}/src/ui/components/TransportBar.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/components/PresetBrowser.cpp
     )
     
     # iPlug2 core source files

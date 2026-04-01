@@ -45,6 +45,16 @@ enum class ConditionMode
   PreFill
 };
 
+enum class MidiInputMode : int
+{
+  Off = 0,          // Ignore incoming MIDI (current behaviour)
+  Thru,             // Pass MIDI through unchanged
+  Transpose,        // Use incoming note as transpose offset for generated pattern
+  Trigger,          // Incoming note-on triggers pattern restart from step 0
+  Gate,             // Pattern only plays while a note is held
+  ThruAndGenerate   // Both pass-through AND generate algorithmic patterns
+};
+
 struct MidiNote
 {
   int pitch;

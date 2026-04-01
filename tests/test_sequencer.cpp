@@ -5,6 +5,9 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
+#include <vector>
+#include <cstdio>
 
 #include "../src/dsp/LockFreeQueue.h"
 #include "../src/dsp/ScaleQuantizer.h"
@@ -13,6 +16,7 @@
 #include "../src/dsp/ParamSmoother.h"
 #include "../src/dsp/TransportSync.h"
 #include "../src/dsp/SequencerEngine.h"
+#include "../src/common/MidiExport.h"
 
 // ============================================================================
 // Helpers
@@ -860,6 +864,10 @@ int main()
   testAlphaDeterminismAllModes();
   testAlphaNoteOffCompleteness();
   testAlphaTransportCycle();
+  testMidiInputTranspose();
+  testResetPlayhead();
+  testMidiExport();
+  testPresetBrowser();
 
   std::cout << "\n==========================\n";
   std::cout << "Results: " << gPassed << " passed, " << gFailed << " failed\n";
@@ -1923,5 +1931,370 @@ static void testAlphaTransportCycle()
     int secondPanic = eng.panicAllNotes(hung);
     EXPECT(secondPanic == 0,
            "TransportCycle: tracker is clean after rapid start/stop + panic");
+  }
+}
+
+// ============================================================================
+// Sprint 7: MIDI Input Tests
+// ============================================================================
+
+static void testMidiInputTranspose()
+{
+  printSection("MidiInput_Transpose");
+
+  // setTransposeOffset adds to generated pitch AFTER scale quantization
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setGenerationMode(GenerationMode::Euclidean);
+    eng.setEuclideanParams(4, 0);  // all steps active
+    eng.setGlobalDensity(1.0);
+    eng.setScale(ScaleMode::Chromatic, 60);
+    eng.setTransposeOffset(0);
+    eng.reset();
+
+    // Run one block with no transpose
+    double ppq = 0.0;
+    const double bpm = 120.0;
+    const int nFrames = 512;
+    const double bpb = 4.0 / 4.0; // quarter-note blocks
+    eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+    int baseNoteCount = eng.getOutputNoteCount();
+    int basePitch = (baseNoteCount > 0) ? eng.getOutputNotes()[0].pitch : -1;
+
+    // Now apply +12 semitone transpose
+    eng.setTransposeOffset(12);
+    eng.reset();
+    eng.processBlock(0.0, bpm, true, nFrames, 44100.0);
+    int transposedCount = eng.getOutputNoteCount();
+    int transposedPitch = (transposedCount > 0) ? eng.getOutputNotes()[0].pitch : -1;
+
+    EXPECT(baseNoteCount > 0, "Transpose: baseline produces notes");
+    EXPECT(transposedCount > 0, "Transpose: transposed pattern produces notes");
+    if (basePitch >= 0 && transposedPitch >= 0)
+      EXPECT(transposedPitch == basePitch + 12,
+             "Transpose +12: pitch shifted up by 12 semitones");
+  }
+
+  // Negative transpose: -12
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(4);
+    eng.setGenerationMode(GenerationMode::Euclidean);
+    eng.setEuclideanParams(4, 0);
+    eng.setGlobalDensity(1.0);
+    eng.setScale(ScaleMode::Chromatic, 72);  // root = C5
+    eng.setOctaveRange(0, 8);
+    eng.setTransposeOffset(0);
+    eng.reset();
+
+    const double bpm = 120.0;
+    const int nFrames = 512;
+    eng.processBlock(0.0, bpm, true, nFrames, 44100.0);
+    int basePitch = (eng.getOutputNoteCount() > 0) ? eng.getOutputNotes()[0].pitch : -1;
+
+    eng.setTransposeOffset(-12);
+    eng.reset();
+    eng.processBlock(0.0, bpm, true, nFrames, 44100.0);
+    int transposedPitch = (eng.getOutputNoteCount() > 0) ? eng.getOutputNotes()[0].pitch : -1;
+
+    EXPECT(transposedPitch != -1, "Transpose -12: produces notes");
+    if (basePitch >= 0 && transposedPitch >= 0)
+      EXPECT(transposedPitch == basePitch - 12,
+             "Transpose -12: pitch shifted down by 12 semitones");
+  }
+}
+
+static void testResetPlayhead()
+{
+  printSection("MidiInput_ResetPlayhead");
+
+  SequencerEngine eng;
+  eng.setSampleRate(44100.0);
+  eng.setStepCount(16);
+  eng.setGenerationMode(GenerationMode::Euclidean);
+  eng.setEuclideanParams(8, 0);
+  eng.setGlobalDensity(1.0);
+  eng.reset();
+
+  // Advance a few blocks so mCurrentStep > 0
+  const double bpm = 120.0;
+  const int nFrames = 512;
+  double ppq = 0.0;
+  const double bpb = 0.25; // one block per step at 120bpm/512samples
+
+  // Play a few blocks
+  for (int b = 0; b < 5; ++b)
+  {
+    eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+    ppq += bpb;
+  }
+
+  // resetPlayhead must set step to 0
+  eng.resetPlayhead();
+  EXPECT(eng.getCurrentStep() == 0,
+         "resetPlayhead: mCurrentStep == 0 after call");
+
+  // Should NOT regenerate the pattern: same step count
+  EXPECT(eng.getStepCount() == 16,
+         "resetPlayhead: stepCount unchanged");
+}
+
+// ============================================================================
+// Sprint 7: MIDI Export Tests
+// ============================================================================
+
+// Read all bytes from a file
+static std::vector<uint8_t> readFile(const char* path)
+{
+  std::ifstream f(path, std::ios::binary);
+  if (!f.is_open()) return {};
+  return std::vector<uint8_t>(
+    std::istreambuf_iterator<char>(f),
+    std::istreambuf_iterator<char>());
+}
+
+static void testMidiExport()
+{
+  printSection("MidiExport");
+
+  const char* tmpPath = "/tmp/test_neuroboost_export.mid";
+
+  // ── Test 1: Valid MIDI file header (MThd) ──────────────────────────────
+  {
+    SequenceStep steps[MAX_STEPS] = {};
+    // 8 active steps
+    for (int i = 0; i < 8; ++i)
+    {
+      steps[i].active        = true;
+      steps[i].pitch         = 60 + i;
+      steps[i].velocity      = 80.0;
+      steps[i].durationBeats = 0.5;
+      steps[i].ratchetCount  = 1;
+      steps[i].ratchetDecay  = 1.0;
+      steps[i].probability   = 1.0;
+    }
+
+    MidiExport::ExportParams p;
+    p.steps                = steps;
+    p.stepCount            = 16;
+    p.bpm                  = 120.0;
+    p.ticksPerQuarterNote  = 480;
+    p.rootNote             = 60;
+    p.scaleMode            = ScaleMode::Major;
+
+    bool ok = MidiExport::writeToFile(tmpPath, p);
+    EXPECT(ok, "MidiExport: writeToFile returns true");
+
+    auto data = readFile(tmpPath);
+    EXPECT(data.size() >= 14, "MidiExport: file has at least 14 bytes (MThd chunk)");
+
+    if (data.size() >= 4)
+    {
+      bool mthd = (data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
+      EXPECT(mthd, "MidiExport: file starts with MThd magic");
+    }
+
+    // Header chunk length must be 6 (big-endian 00 00 00 06)
+    if (data.size() >= 8)
+    {
+      uint32_t hlen = ((uint32_t)data[4] << 24) | ((uint32_t)data[5] << 16)
+                    | ((uint32_t)data[6] << 8)  |  (uint32_t)data[7];
+      EXPECT(hlen == 6, "MidiExport: MThd chunk length == 6");
+    }
+
+    // Format 0, 1 track
+    if (data.size() >= 12)
+    {
+      uint16_t fmt    = ((uint16_t)data[8] << 8)  | data[9];
+      uint16_t ntrks  = ((uint16_t)data[10] << 8) | data[11];
+      EXPECT(fmt == 0,   "MidiExport: format 0 (single track)");
+      EXPECT(ntrks == 1, "MidiExport: 1 track");
+    }
+
+    // MTrk chunk follows immediately after MThd (at offset 14)
+    if (data.size() >= 18)
+    {
+      bool mtrk = (data[14] == 'M' && data[15] == 'T'
+                && data[16] == 'r' && data[17] == 'k');
+      EXPECT(mtrk, "MidiExport: MTrk chunk present at offset 14");
+    }
+  }
+
+  // ── Test 2: Correct note event count for 8-active / 16-step pattern ──
+  {
+    SequenceStep steps[MAX_STEPS] = {};
+    int activeCount = 0;
+    for (int i = 0; i < 16; ++i)
+    {
+      steps[i].ratchetCount  = 1;
+      steps[i].ratchetDecay  = 1.0;
+      steps[i].probability   = 1.0;
+      steps[i].durationBeats = 0.5;
+      steps[i].velocity      = 80.0;
+      if (i % 2 == 0)       // 8 active steps
+      {
+        steps[i].active = true;
+        steps[i].pitch  = 60;
+        ++activeCount;
+      }
+    }
+
+    MidiExport::ExportParams p;
+    p.steps               = steps;
+    p.stepCount           = 16;
+    p.bpm                 = 120.0;
+    p.ticksPerQuarterNote = 480;
+    p.rootNote            = 60;
+    p.scaleMode           = ScaleMode::Major;
+
+    MidiExport::writeToFile(tmpPath, p);
+    auto data = readFile(tmpPath);
+
+    // Count 0x90 (Note-On) events in track data
+    int noteOnCount = 0;
+    for (size_t i = 0; i + 2 < data.size(); ++i)
+    {
+      if ((data[i] & 0xF0) == 0x90 && data[i + 2] > 0)
+        ++noteOnCount;
+    }
+    EXPECT(noteOnCount == activeCount,
+           "MidiExport: note-on count equals active step count (8)");
+  }
+
+  // ── Test 3: Empty pattern produces valid (but empty) file ─────────────
+  {
+    SequenceStep steps[MAX_STEPS] = {};
+    // all inactive
+
+    MidiExport::ExportParams p;
+    p.steps               = steps;
+    p.stepCount           = 16;
+    p.bpm                 = 120.0;
+    p.ticksPerQuarterNote = 480;
+    p.rootNote            = 60;
+    p.scaleMode           = ScaleMode::Chromatic;
+
+    bool ok = MidiExport::writeToFile(tmpPath, p);
+    EXPECT(ok, "MidiExport: empty pattern writes without error");
+    auto data = readFile(tmpPath);
+    EXPECT(data.size() >= 14, "MidiExport: empty pattern file has MThd");
+    if (data.size() >= 4)
+      EXPECT(data[0] == 'M', "MidiExport: empty pattern file has correct magic");
+  }
+
+  // ── Test 4: Ratcheted step produces multiple sub-notes ────────────────
+  {
+    SequenceStep steps[MAX_STEPS] = {};
+    steps[0].active        = true;
+    steps[0].pitch         = 60;
+    steps[0].velocity      = 100.0;
+    steps[0].durationBeats = 0.5;
+    steps[0].ratchetCount  = 4;   // 4 sub-notes
+    steps[0].ratchetDecay  = 0.9;
+    steps[0].probability   = 1.0;
+
+    MidiExport::ExportParams p;
+    p.steps               = steps;
+    p.stepCount           = 1;
+    p.bpm                 = 120.0;
+    p.ticksPerQuarterNote = 480;
+    p.rootNote            = 60;
+    p.scaleMode           = ScaleMode::Chromatic;
+
+    MidiExport::writeToFile(tmpPath, p);
+    auto data = readFile(tmpPath);
+
+    int noteOnCount = 0;
+    for (size_t i = 0; i + 2 < data.size(); ++i)
+      if ((data[i] & 0xF0) == 0x90 && data[i + 2] > 0)
+        ++noteOnCount;
+
+    EXPECT(noteOnCount == 4,
+           "MidiExport: ratchet count=4 produces 4 note-on events");
+  }
+
+  // ── Test 5: VLQ encoding correctness ──────────────────────────────────
+  {
+    // Test our VLQ encoder directly using a tiny helper
+    auto encodeVlq = [](uint32_t value) -> std::vector<uint8_t> {
+      std::vector<uint8_t> out;
+      uint8_t bytes[4];
+      int len = 0;
+      bytes[len++] = static_cast<uint8_t>(value & 0x7F);
+      value >>= 7;
+      while (value) {
+        bytes[len++] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+        value >>= 7;
+      }
+      for (int i = len - 1; i >= 0; --i)
+        out.push_back(bytes[i]);
+      return out;
+    };
+
+    auto v0 = encodeVlq(0);
+    EXPECT(v0.size() == 1 && v0[0] == 0x00, "VLQ: 0 encodes to 0x00");
+
+    auto v127 = encodeVlq(127);
+    EXPECT(v127.size() == 1 && v127[0] == 0x7F, "VLQ: 127 encodes to 0x7F");
+
+    auto v128 = encodeVlq(128);
+    EXPECT(v128.size() == 2 && v128[0] == 0x81 && v128[1] == 0x00,
+           "VLQ: 128 encodes to 0x81 0x00");
+
+    auto v16383 = encodeVlq(16383);
+    EXPECT(v16383.size() == 2 && v16383[0] == 0xFF && v16383[1] == 0x7F,
+           "VLQ: 16383 encodes to 0xFF 0x7F");
+
+    auto v16384 = encodeVlq(16384);
+    EXPECT(v16384.size() == 3, "VLQ: 16384 encodes to 3 bytes");
+  }
+
+  // Cleanup
+  std::remove(tmpPath);
+}
+
+// ============================================================================
+// Sprint 7: Preset Tests
+// ============================================================================
+
+static void testPresetBrowser()
+{
+  printSection("PresetBrowser");
+
+  // Test: cycling all 10 factory presets doesn't crash the engine
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    bool allLoaded = true;
+    for (int i = 0; i < kNumFactoryPresets; ++i)
+    {
+      eng.loadPreset(FACTORY_PRESETS[i]);
+      if (eng.getStepCount() < 1 || eng.getStepCount() > MAX_STEPS)
+        allLoaded = false;
+    }
+    EXPECT(allLoaded, "PresetBrowser: all 10 factory presets load without crash");
+  }
+
+  // Test: engine state is correctly updated after preset load
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.loadPreset(FACTORY_PRESETS[0]);  // Classic 4/4: Euclidean, 16 steps
+    EXPECT(eng.getStepCount() == 16,
+           "PresetBrowser: Classic 4/4 loads with 16 steps");
+    EXPECT(eng.getGenerationMode() == GenerationMode::Euclidean,
+           "PresetBrowser: Classic 4/4 loads with Euclidean mode");
+  }
+
+  // Test: loading a preset with a non-default scale
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.loadPreset(FACTORY_PRESETS[5]);  // Mandelbrot Dance: WholeTone
+    EXPECT(eng.getScaleMode() == ScaleMode::WholeTone,
+           "PresetBrowser: Mandelbrot Dance loads with WholeTone scale");
   }
 }

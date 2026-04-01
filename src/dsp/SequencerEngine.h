@@ -118,6 +118,15 @@ public:
   void setStepActive(int index, bool active);
   void setStepAccent(int index, bool accent);
 
+  // ---- MIDI Input helpers ----
+
+  /// Set the transpose offset in semitones applied AFTER scale quantization.
+  /// Positive = shift up, negative = shift down.
+  void setTransposeOffset(int semitones);
+
+  /// Reset the playhead to step 0 without regenerating the pattern.
+  void resetPlayhead();
+
   // ---- Panic ----
 
   /// Force all active notes off immediately.
@@ -186,6 +195,9 @@ private:
   double         mVelocityCurve;
   int            mOctaveLow;
   int            mOctaveHigh;
+
+  // MIDI transpose offset (semitones, applied after scale quantization)
+  int            mTransposeOffset;
 
   // Cycle counter (incremented each time mCurrentStep wraps to 0)
   int            mCycleCount;

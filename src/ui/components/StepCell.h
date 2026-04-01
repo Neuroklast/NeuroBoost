@@ -38,6 +38,10 @@ public:
   void setPlayhead(bool isPlayhead);
   bool isPlayhead() const { return mIsPlayhead; }
 
+  /// Highlight this cell as the currently selected step (keyboard navigation).
+  void setSelected(bool selected);
+  bool isSelected() const { return mIsSelected; }
+
   /// Trigger the brief flash animation (called when the step fires).
   void triggerFlash();
 
@@ -70,6 +74,7 @@ private:
   float mProbability  = 1.0f;
   bool  mIsPlayhead   = false;
   bool  mAccent       = false;
+  bool  mIsSelected   = false;
 
   // Flash animation state
   static constexpr float kFlashDurationMs = 80.0f;
