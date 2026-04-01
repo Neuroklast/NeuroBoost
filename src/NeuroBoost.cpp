@@ -74,6 +74,24 @@ void NeuroBoost::OnReset()
   mEngine.setSampleRate(GetSampleRate());
 }
 
+void NeuroBoost::OnActivate(bool active)
+{
+  if (!active)
+    sendPanicNoteOffs();
+}
+
+void NeuroBoost::sendPanicNoteOffs()
+{
+  ActiveNote panicNotes[MAX_POLYPHONY];
+  int count = mEngine.panicAllNotes(panicNotes);
+  for (int i = 0; i < count; ++i)
+  {
+    IMidiMsg msg;
+    msg.MakeNoteOffMsg(panicNotes[i].pitch, 0, panicNotes[i].channel - 1);
+    SendMidiMsg(msg);
+  }
+}
+
 void NeuroBoost::OnIdle()
 {
   // Poll playhead position updates from the audio thread and update UI
@@ -85,6 +103,13 @@ void NeuroBoost::OnIdle()
       mEditorView->setPlayheadStep(step);
       mEditorView->triggerStepFlash(step);
     }
+  }
+
+  // Sync knob positions when the host changes parameters via automation
+  if (mEditorView)
+  {
+    for (int i = 0; i < kNumParams; ++i)
+      mEditorView->updateKnobFromHost(i, GetParam(i)->Value());
   }
 }
 
@@ -176,8 +201,10 @@ void* NeuroBoost::OpenWindow(void* pParent)
   mEditorView = std::make_unique<EditorView>(
     [this](int idx) { return GetParam(idx)->Value(); },
     [this](int idx, double value) {
+      BeginInformHostOfParamChange(idx);
       GetParam(idx)->Set(value);
       SendParameterValueFromUI(idx, GetParam(idx)->GetNormalized());
+      EndInformHostOfParamChange(idx);
     }
   );
   mEditorView->setBounds(0, 0, mEditor->width(), mEditor->height());
@@ -185,6 +212,15 @@ void* NeuroBoost::OpenWindow(void* pParent)
 
   mEditorView->setOnStepActiveChanged([this](int step, bool active) {
     mEngine.setStepActive(step, active);
+  });
+  mEditorView->setOnStepVelocityChanged([this](int step, double velocity) {
+    mEngine.setStepVelocity(step, velocity * 127.0);
+  });
+  mEditorView->setOnStepProbabilityChanged([this](int step, double probability) {
+    mEngine.setStepProbability(step, probability);
+  });
+  mEditorView->setOnStepAccentToggled([this](int step, bool accent) {
+    mEngine.setStepAccent(step, accent);
   });
 
   mWindow = visage::createPluginWindow(mEditor->width(), mEditor->height(), pParent);
@@ -210,6 +246,8 @@ void NeuroBoost::OnParentWindowResize(int width, int height)
 
 void NeuroBoost::CloseWindow()
 {
+  sendPanicNoteOffs();
+
   if (mEditor)
   {
     mEditor->removeFromWindow();

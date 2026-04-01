@@ -39,6 +39,7 @@ public:
 
   void OnIdle() override;
   void OnReset() override;
+  void OnActivate(bool active) override;
   void OnParamChange(int paramIdx) override;
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
@@ -51,6 +52,8 @@ public:
   void ProcessBlock(sample** inputs, sample** outputs, int nFrames) override;
 
 private:
+  void sendPanicNoteOffs();
+
   SequencerEngine                mEngine;
   LockFreeQueue<int, 64>         mPlayheadQueue;
 

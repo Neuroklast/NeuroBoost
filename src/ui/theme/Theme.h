@@ -9,6 +9,7 @@ VISAGE_THEME_COLOR(CellInactiveColor, 0xff16213e);  // Inactive step cell
 VISAGE_THEME_COLOR(CellActiveColor,   0xff4a9eff);  // Active step cell
 VISAGE_THEME_COLOR(CellPlayheadColor, 0xff00d2ff);  // Currently playing step
 VISAGE_THEME_COLOR(CellAccentColor,   0xffff6b35);  // Accented step
+VISAGE_THEME_COLOR(CellProbabilityColor, 0xff00ccaa); // Probability bar (teal)
 
 // Knobs & Controls
 VISAGE_THEME_COLOR(KnobBackgroundColor, 0xff16213e);

@@ -17,6 +17,14 @@ StepGrid::StepGrid()
     mCells[i].onVelocityChange() = [this, idx](float vel) {
       mOnVelocityChanged.call(idx, vel);
     };
+
+    mCells[i].onProbabilityChange() = [this, idx](float prob) {
+      mOnProbabilityChanged.call(idx, prob);
+    };
+
+    mCells[i].onAccentToggle() = [this, idx](bool accent) {
+      mOnAccentToggled.call(idx, accent);
+    };
   }
 }
 

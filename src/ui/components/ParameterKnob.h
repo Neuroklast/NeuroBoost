@@ -32,6 +32,9 @@ public:
   /// Set the knob value (clamped to [minVal, maxVal]).
   void setValue(double value);
 
+  /// Set value from host automation — updates the visual without firing onValueChange.
+  void setValueFromHost(double value);
+
   /// Returns the current knob value in [minVal, maxVal].
   double getValue() const { return mValue; }
 

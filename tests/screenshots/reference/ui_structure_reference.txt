@@ -1,0 +1,31 @@
+EditorView [0, 0, 900, 600]
+  ModeSelector "GenMode" [10, 8, 180, 32] options=7 selected=0
+  ModeSelector "ScaleMode" [200, 8, 180, 32] options=15 selected=1
+  ModeSelector "RootNote" [390, 8, 120, 32] options=12 selected=0
+  StepGrid [0, 48, 600, 300] steps=16 playhead=3
+    StepCell[0] active=true vel=1 prob=1 accent=false playhead=false
+    StepCell[1] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[2] active=true vel=1 prob=1 accent=false playhead=false
+    StepCell[3] active=false vel=1 prob=1 accent=false playhead=true
+    StepCell[4] active=true vel=1 prob=1 accent=false playhead=false
+    StepCell[5] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[6] active=true vel=1 prob=1 accent=false playhead=false
+    StepCell[7] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[8] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[9] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[10] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[11] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[12] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[13] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[14] active=false vel=1 prob=1 accent=false playhead=false
+    StepCell[15] active=false vel=1 prob=1 accent=false playhead=false
+  ParameterKnob "Steps" [10, 360, 80, 80] min=1 max=64 value=16
+  ParameterKnob "Hits" [100, 360, 80, 80] min=0 max=64 value=4
+  ParameterKnob "Rotate" [190, 360, 80, 80] min=0 max=63 value=0
+  ParameterKnob "OctLow" [10, 460, 80, 80] min=0 max=8 value=3
+  ParameterKnob "OctHigh" [100, 460, 80, 80] min=0 max=8 value=5
+  ParameterKnob "Density" [190, 460, 80, 80] min=0 max=1 value=1
+  ParameterKnob "Swing" [280, 360, 80, 80] min=0 max=0.5 value=0
+  ParameterKnob "Mutation" [370, 360, 80, 80] min=0 max=1 value=0
+  ParameterKnob "VelCurve" [460, 360, 80, 80] min=0.1 max=4 value=1
+  TransportBar [0, 560, 900, 40] playing=false

@@ -8,6 +8,7 @@
 #include "../common/Presets.h"
 #include "Algorithms.h"
 #include "NoteTracker.h"
+#include "ParamSmoother.h"
 #include "TransportSync.h"
 #include "ScaleQuantizer.h"
 
@@ -117,12 +118,21 @@ public:
   void setStepActive(int index, bool active);
   void setStepAccent(int index, bool accent);
 
+  // ---- Panic ----
+
+  /// Force all active notes off immediately.
+  /// Writes up to MAX_POLYPHONY notes to notesOut[] and returns the count.
+  /// Realtime-safe (no heap, no mutex).
+  int panicAllNotes(ActiveNote* notesOut) { return mNoteTracker.panic(notesOut); }
+
   // ---- Preset loading ----
   void loadPreset(const PresetData& preset);
 
 private:
-  // Fire notes for a single sequencer step.
-  void generateStepNotes(int stepIndex, double stepBeat, int nFrames);
+  // Fire notes for a single sequencer step using the given smoothed parameters.
+  void generateStepNotes(int stepIndex, double stepBeat, int nFrames,
+                         double density, double swing,
+                         double velocityCurve, double mutationRate);
 
   // Beat duration of a single step at the current step count.
   double stepDuration() const;
@@ -190,4 +200,10 @@ private:
   NoteTracker    mNoteTracker;
   TransportSync  mTransport;
   std::mt19937   mRng;
+
+  // ---- Parameter smoothers (realtime-safe) ----
+  ParamSmoother  mDensitySmoother;
+  ParamSmoother  mSwingSmoother;
+  ParamSmoother  mVelocityCurveSmoother;
+  ParamSmoother  mMutationRateSmoother;
 };

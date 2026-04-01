@@ -52,6 +52,12 @@ public:
   /// Fired when velocity is changed via drag: void(int stepIndex, float velocity)
   auto& onVelocityChanged() { return mOnVelocityChanged; }
 
+  /// Fired when probability is changed via shift+drag: void(int stepIndex, float probability)
+  auto& onProbabilityChanged() { return mOnProbabilityChanged; }
+
+  /// Fired when accent is toggled via right-click: void(int stepIndex, bool accent)
+  auto& onAccentToggled() { return mOnAccentToggled; }
+
 private:
   int mStepCount    = 16;
   int mPlayheadStep = -1;
@@ -60,6 +66,8 @@ private:
 
   visage::CallbackList<void(int, bool)>  mOnStepToggled;
   visage::CallbackList<void(int, float)> mOnVelocityChanged;
+  visage::CallbackList<void(int, float)> mOnProbabilityChanged;
+  visage::CallbackList<void(int, bool)>  mOnAccentToggled;
 
   void layoutCells();
 };

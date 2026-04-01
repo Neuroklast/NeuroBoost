@@ -64,6 +64,18 @@ void EditorView::buildWidgets()
     if (mOnStepActiveChanged)
       mOnStepActiveChanged(step, active);
   };
+  mStepGrid->onVelocityChanged() = [this](int step, float velocity) {
+    if (mOnStepVelocityChanged)
+      mOnStepVelocityChanged(step, static_cast<double>(velocity));
+  };
+  mStepGrid->onProbabilityChanged() = [this](int step, float prob) {
+    if (mOnStepProbabilityChanged)
+      mOnStepProbabilityChanged(step, static_cast<double>(prob));
+  };
+  mStepGrid->onAccentToggled() = [this](int step, bool accent) {
+    if (mOnStepAccentToggled)
+      mOnStepAccentToggled(step, accent);
+  };
   addChild(mStepGrid.get());
 
   // -- Rhythm knobs --
@@ -306,4 +318,38 @@ void EditorView::setPlaying(bool playing)
 {
   if (mTransportBar)
     mTransportBar->setPlaying(playing);
+}
+
+void EditorView::updateKnobFromHost(int paramIdx, double value)
+{
+  // Map parameter index to the appropriate knob and update display without feedback.
+  ParameterKnob* knob = nullptr;
+  switch (paramIdx)
+  {
+    case kStepCount:        knob = mStepsKnob.get();        break;
+    case kEuclideanHits:    knob = mHitsKnob.get();         break;
+    case kEuclideanRotation:knob = mRotateKnob.get();       break;
+    case kOctaveLow:        knob = mOctaveLowKnob.get();    break;
+    case kOctaveHigh:       knob = mOctaveHighKnob.get();   break;
+    case kGlobalDensity:    knob = mDensityKnob.get();      break;
+    case kSwing:            knob = mSwingKnob.get();        break;
+    case kMutationRate:     knob = mMutationKnob.get();     break;
+    case kVelocityCurve:    knob = mVelocityCurveKnob.get();break;
+    case kGenMode:
+      if (mGenModeSelector)
+        mGenModeSelector->setSelectedIndex(static_cast<int>(value));
+      return;
+    case kScaleMode:
+      if (mScaleModeSelector)
+        mScaleModeSelector->setSelectedIndex(static_cast<int>(value));
+      return;
+    case kRootNote:
+      if (mRootNoteSelector)
+        mRootNoteSelector->setSelectedIndex(static_cast<int>(value) % 12);
+      return;
+    default:
+      return;
+  }
+  if (knob)
+    knob->setValueFromHost(value);
 }

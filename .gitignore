@@ -58,3 +58,6 @@ Makefile
 *.zip
 *.tar.gz
 *.dmg
+
+# UI test screenshots (generated artifacts; reference files are tracked)
+tests/screenshots/ui_structure_dump.txt
