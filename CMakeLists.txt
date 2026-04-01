@@ -7,6 +7,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Options
 option(BUILD_DSP_TEST "Build DSP test executable (no dependencies required)" ON)
+option(BUILD_UI_TEST "Build UI structure test executable (no Visage/iPlug2 required)" ON)
 option(BUILD_VST3 "Build VST3 plugin (requires iPlug2 and Visage)" OFF)
 option(BUILD_STANDALONE "Build standalone application (requires iPlug2 and Visage)" OFF)
 option(BUILD_AU "Build Audio Unit plugin" OFF)
@@ -60,6 +61,46 @@ if(BUILD_DSP_TEST)
     # Sequencer tests (authoritative test suite)
     add_test(NAME Sequencer_Tests
              COMMAND test_sequencer)
+endif()
+
+# ============================================================================
+# UI Structure Test Target (no Visage/iPlug2 required)
+# ============================================================================
+if(BUILD_UI_TEST)
+    message(STATUS "Configuring UI structure test executable...")
+
+    add_executable(test_ui_structure
+        ${CMAKE_SOURCE_DIR}/tests/test_ui_structure.cpp
+    )
+
+    target_include_directories(test_ui_structure PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/common
+        ${CMAKE_SOURCE_DIR}/src/dsp
+    )
+
+    target_compile_definitions(test_ui_structure PRIVATE
+        _USE_MATH_DEFINES
+    )
+
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(test_ui_structure PRIVATE m)
+    endif()
+
+    set_target_properties(test_ui_structure PROPERTIES
+        OUTPUT_NAME "test_ui_structure"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+
+    # Enable testing if not already enabled
+    if(NOT BUILD_DSP_TEST)
+        enable_testing()
+    endif()
+
+    add_test(NAME UI_Structure_Tests
+             COMMAND test_ui_structure
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
 
 # ============================================================================
@@ -434,6 +475,7 @@ endif()
 message(STATUS "")
 message(STATUS "NeuroBoost CMake configuration complete")
 message(STATUS "  - DSP Test (sequencer): ${BUILD_DSP_TEST}")
+message(STATUS "  - UI Structure Test: ${BUILD_UI_TEST}")
 message(STATUS "  - VST3 build: ${BUILD_VST3}")
 message(STATUS "  - Standalone build: ${BUILD_STANDALONE}")
 message(STATUS "  - iPlug2 root: ${IPLUG2_ROOT}")

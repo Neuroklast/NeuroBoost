@@ -140,6 +140,13 @@ void ParameterKnob::setValue(double value)
   redraw();
 }
 
+void ParameterKnob::setValueFromHost(double value)
+{
+  // Updates the visual display without triggering the onValueChange callback.
+  mValue = std::max(mMinVal, std::min(mMaxVal, value));
+  redraw();
+}
+
 double ParameterKnob::getNormalized() const
 {
   double range = mMaxVal - mMinVal;

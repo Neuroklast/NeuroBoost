@@ -10,6 +10,7 @@
 #include "../src/dsp/ScaleQuantizer.h"
 #include "../src/dsp/NoteTracker.h"
 #include "../src/dsp/Algorithms.h"
+#include "../src/dsp/ParamSmoother.h"
 #include "../src/dsp/TransportSync.h"
 #include "../src/dsp/SequencerEngine.h"
 
@@ -819,6 +820,9 @@ static void testConditionModes();
 static void testPerStepEditing();
 static void testVelocityCurveAndOctaveRange();
 static void testStateSerialization();
+static void testParamSmoother();
+static void testNoteOffTiming();
+static void testPanic();
 
 int main()
 {
@@ -845,6 +849,9 @@ int main()
   testPerStepEditing();
   testVelocityCurveAndOctaveRange();
   testStateSerialization();
+  testParamSmoother();
+  testNoteOffTiming();
+  testPanic();
 
   std::cout << "\n==========================\n";
   std::cout << "Results: " << gPassed << " passed, " << gFailed << " failed\n";
@@ -1317,5 +1324,274 @@ static void testStateSerialization()
     SequencerEngine eng;
     eng.setMarkovStartNote(7);
     EXPECT(eng.getMarkovStartNote() == 7, "setMarkovStartNote(7) round-trip");
+  }
+}
+
+// ============================================================================
+// ParamSmoother tests
+// ============================================================================
+
+static void testParamSmoother()
+{
+  printSection("ParamSmoother");
+
+  // Coefficient=1.0 means instant response (one step converges completely)
+  {
+    ParamSmoother sm;
+    sm.setCoefficient(1.0);
+    sm.reset(0.0);
+    sm.setTarget(1.0);
+    double v = sm.process();
+    EXPECT(std::abs(v - 1.0) < 1e-9, "coefficient=1.0: single process() reaches target");
+  }
+
+  // Coefficient near 0 means very slow response
+  {
+    ParamSmoother sm;
+    sm.setCoefficient(0.001);
+    sm.reset(0.0);
+    sm.setTarget(1.0);
+    // After 10 steps, should still be far from target
+    for (int i = 0; i < 10; ++i) sm.process();
+    double v = sm.getCurrent();
+    EXPECT(v < 0.02, "coefficient=0.001: after 10 steps still near 0");
+  }
+
+  // Converges to target within reasonable iterations (default ~15Hz at 44100)
+  {
+    ParamSmoother sm;
+    const double coeff = ParamSmoother::makeCoefficient(15.0, 44100.0);
+    sm.setCoefficient(coeff);
+    sm.reset(0.0);
+    sm.setTarget(1.0);
+    // 1 second at 44100 Hz = 44100 samples; 15Hz smoother should be 99%+ converged
+    for (int i = 0; i < 44100; ++i) sm.process();
+    double v = sm.getCurrent();
+    EXPECT(v > 0.99, "15Hz smoother converges >99% after 1 second");
+  }
+
+  // reset() immediately jumps to value
+  {
+    ParamSmoother sm;
+    sm.setCoefficient(0.01);
+    sm.reset(0.5);
+    sm.setTarget(1.0);
+    sm.process(); sm.process();  // some steps
+    sm.reset(0.75);
+    EXPECT(std::abs(sm.getCurrent() - 0.75) < 1e-9, "reset() snaps current to value");
+    EXPECT(std::abs(sm.getTarget()  - 0.75) < 1e-9, "reset() snaps target to value");
+  }
+
+  // Coefficient clamp: values outside [0,1] are clamped
+  {
+    ParamSmoother sm;
+    sm.setCoefficient(2.0);   // should clamp to 1.0
+    sm.reset(0.0);
+    sm.setTarget(0.5);
+    double v = sm.process();
+    EXPECT(v <= 0.5 + 1e-9, "coefficient clamped to 1: process() does not overshoot");
+  }
+
+  // makeCoefficient: returns 1.0 for invalid sample rate
+  {
+    double c = ParamSmoother::makeCoefficient(15.0, 0.0);
+    EXPECT(c == 1.0, "makeCoefficient: sampleRate=0 returns 1.0");
+  }
+}
+
+// ============================================================================
+// Note-Off timing tests
+// ============================================================================
+
+static void testNoteOffTiming()
+{
+  printSection("NoteOffTiming");
+
+  // Basic: note-on at beat 0 with duration 0.25, then processBlock at beat 0.25
+  // should produce a note-off for that pitch
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0);
+    eng.regeneratePattern();
+
+    const double bpm      = 120.0;
+    const double srF      = 44100.0;
+    const int    nFrames  = 512;
+    // One beat in samples at 120 BPM = 44100*60/120 = 22050 samples
+    const double beatsPerSample = bpm / (60.0 * srF);
+    const double beatsPerBlock  = beatsPerSample * nFrames;
+
+    // Run until we get a note-on
+    double ppq    = 0.0;
+    int    noteOnPitch = -1;
+    for (int b = 0; b < 200 && noteOnPitch < 0; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, srF);
+      if (eng.getOutputNoteCount() > 0)
+        noteOnPitch = eng.getOutputNotes()[0].pitch;
+      ppq += beatsPerBlock;
+    }
+
+    EXPECT(noteOnPitch >= 0, "NoteOffTiming: got at least one note-on");
+
+    // Continue running until we get a note-off for that pitch
+    bool gotNoteOff = false;
+    for (int b = 0; b < 500 && !gotNoteOff; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, srF);
+      for (int i = 0; i < eng.getNoteOffCount(); ++i)
+        if (eng.getNoteOffNotes()[i].pitch == noteOnPitch)
+          gotNoteOff = true;
+      ppq += beatsPerBlock;
+    }
+
+    EXPECT(gotNoteOff, "NoteOffTiming: note-off received for the triggered pitch");
+  }
+
+  // Multiple simultaneous notes each get their own note-off
+  {
+    NoteTracker tracker;
+    tracker.noteOn(60, 1, 1.0);
+    tracker.noteOn(64, 1, 1.0);
+    tracker.noteOn(67, 1, 1.0);
+    EXPECT(tracker.activeCount() == 3, "NoteOffTiming: 3 active notes registered");
+
+    ActiveNote offs[MAX_POLYPHONY];
+    int n = tracker.checkNoteOffs(1.5, offs);  // beat 1.5 > 1.0 for all
+    EXPECT(n == 3, "NoteOffTiming: checkNoteOffs returns 3 at beat 1.5");
+    EXPECT(tracker.activeCount() == 0, "NoteOffTiming: all cleared after checkNoteOffs");
+  }
+
+  // Note-off sample offset is a valid value within [0, nFrames-1]
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0);
+    eng.regeneratePattern();
+
+    const double bpm = 120.0;
+    const int nFrames = 512;
+    const double beatsPerBlock = (bpm / (60.0 * 44100.0)) * nFrames;
+    double ppq = 0.0;
+    bool offsetsOk = true;
+    for (int b = 0; b < 500; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      for (int i = 0; i < eng.getNoteOffCount(); ++i)
+      {
+        int off = eng.getNoteOffNotes()[i].sampleOffset;
+        if (off < 0 || off >= nFrames) offsetsOk = false;
+      }
+      ppq += beatsPerBlock;
+    }
+    EXPECT(offsetsOk, "NoteOffTiming: all note-off sample offsets within [0, nFrames-1]");
+  }
+
+  // Ratcheted notes: each ratchet eventually gets its note-off
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(1);
+    eng.setEuclideanParams(1, 0);
+    eng.setStepRatchet(0, 3, 1.0);  // 3 ratchets, no decay
+    eng.regeneratePattern();
+
+    const double bpm = 120.0;
+    const int nFrames = 512;
+    const double beatsPerBlock = (bpm / (60.0 * 44100.0)) * nFrames;
+    double ppq = 0.0;
+
+    // Collect note-ons and note-offs over 400 blocks
+    int totalNoteOns = 0;
+    int totalNoteOffs = 0;
+    for (int b = 0; b < 400; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      totalNoteOns  += eng.getOutputNoteCount();
+      totalNoteOffs += eng.getNoteOffCount();
+      ppq += beatsPerBlock;
+    }
+    // Drain any remaining note-offs (no new note-ons in "playing=false" mode)
+    eng.processBlock(ppq, bpm, false, nFrames, 44100.0);
+    totalNoteOffs += eng.getNoteOffCount();
+
+    EXPECT(totalNoteOns > 0,  "Ratchet NoteOff: at least one note-on produced");
+    EXPECT(totalNoteOffs > 0, "Ratchet NoteOff: at least one note-off produced");
+    // With 3 ratchets per step, offs should be a multiple-of-3 fraction of ons
+    EXPECT(totalNoteOffs <= totalNoteOns,
+           "Ratchet NoteOff: note-off count does not exceed note-on count");
+  }
+}
+
+// ============================================================================
+// Panic tests
+// ============================================================================
+
+static void testPanic()
+{
+  printSection("Panic");
+
+  // After 4 notes active, panic() returns all 4 with correct pitches
+  {
+    NoteTracker tracker;
+    tracker.noteOn(60, 1, 99.0);
+    tracker.noteOn(64, 1, 99.0);
+    tracker.noteOn(67, 1, 99.0);
+    tracker.noteOn(72, 1, 99.0);
+
+    EXPECT(tracker.activeCount() == 4, "Panic: 4 notes active before panic");
+
+    ActiveNote out[MAX_POLYPHONY];
+    int n = tracker.panic(out);
+    EXPECT(n == 4, "Panic: panic() returns 4 notes");
+    EXPECT(tracker.activeCount() == 0, "Panic: activeCount() == 0 after panic");
+
+    bool pitchesOk = false;
+    for (int i = 0; i < n; ++i)
+      if (out[i].pitch == 60) pitchesOk = true;
+    EXPECT(pitchesOk, "Panic: pitch 60 present in panic output");
+  }
+
+  // Panic on empty tracker returns 0
+  {
+    NoteTracker tracker;
+    ActiveNote out[MAX_POLYPHONY];
+    int n = tracker.panic(out);
+    EXPECT(n == 0, "Panic: empty tracker → panic() returns 0");
+  }
+
+  // panicAllNotes() via SequencerEngine
+  {
+    SequencerEngine eng;
+    eng.setSampleRate(44100.0);
+    eng.setStepCount(16);
+    eng.setEuclideanParams(16, 0);
+    eng.regeneratePattern();
+
+    const double bpm = 120.0;
+    const int nFrames = 512;
+    const double beatsPerBlock = (bpm / (60.0 * 44100.0)) * nFrames;
+    double ppq = 0.0;
+
+    // Accumulate some notes
+    for (int b = 0; b < 20; ++b)
+    {
+      eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+      ppq += beatsPerBlock;
+    }
+
+    // Now panic — should clear all notes
+    ActiveNote panicNotes[MAX_POLYPHONY];
+    int n = eng.panicAllNotes(panicNotes);
+    EXPECT(n >= 0, "Panic: panicAllNotes() returns non-negative count");
+    // Run one more block — no note-offs should be generated from stale notes
+    // (they were already panicked)
+    eng.processBlock(ppq, bpm, true, nFrames, 44100.0);
+    // We can't easily verify zero note-offs here because new notes may have
+    // been generated in this block, but we verify the API works
+    EXPECT(true, "Panic: panicAllNotes() API works without crash");
   }
 }

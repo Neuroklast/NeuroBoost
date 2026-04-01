@@ -15,7 +15,7 @@ void StepCell::draw(visage::Canvas& canvas)
   // Flash overlay: interpolate toward white
   float flashT = (mFlashTimer > 0.0f) ? mFlashTimer / kFlashDurationMs : 0.0f;
 
-  // Determine cell color name based on state
+  // Determine cell color based on state
   if (mIsPlayhead)
     canvas.setColor(CellPlayheadColor);
   else if (mActive)
@@ -33,6 +33,16 @@ void StepCell::draw(visage::Canvas& canvas)
     canvas.fill(kPad, kPad, w - kPad * 2.0f, h - kPad * 2.0f);
   }
 
+  // Accent border: orange outline
+  if (mAccent)
+  {
+    canvas.setColor(CellAccentColor);
+    canvas.fill(kPad, kPad, w - kPad * 2.0f, 2.0f);               // top
+    canvas.fill(kPad, h - kPad - 2.0f, w - kPad * 2.0f, 2.0f);    // bottom
+    canvas.fill(kPad, kPad, 2.0f, h - kPad * 2.0f);               // left
+    canvas.fill(w - kPad - 2.0f, kPad, 2.0f, h - kPad * 2.0f);    // right
+  }
+
   // Velocity bar (thin strip at bottom of active cells)
   if (mActive && mVelocity < 0.99f)
   {
@@ -43,20 +53,23 @@ void StepCell::draw(visage::Canvas& canvas)
     canvas.fill(kPad, barY, barW, barH);
   }
 
-  // Probability indicator (small dot in top-right corner for prob < 1)
+  // Probability bar (distinct teal/blue overlay at top for prob < 1)
   if (mActive && mProbability < 0.99f)
   {
-    float dotR = 3.0f;
-    canvas.setColor(CellAccentColor);
-    canvas.circle(w - kPad - dotR * 2.0f, kPad, dotR * 2.0f);
+    canvas.setColor(CellProbabilityColor);
+    float barH = 3.0f;
+    float barW = (w - kPad * 2.0f) * mProbability;
+    canvas.fill(kPad, kPad, barW, barH);
   }
 }
 
 void StepCell::mouseDown(const visage::MouseEvent& e)
 {
-  mIsDragging       = true;
-  mDragStartY       = e.y;
-  mDragStartVelocity = mVelocity;
+  mIsDragging         = true;
+  mDragStartY         = e.y;
+  mDragStartVelocity  = mVelocity;
+  mDragStartProbability = mProbability;
+  mIsShiftDrag        = e.isShiftDown();
 }
 
 void StepCell::mouseDrag(const visage::MouseEvent& e)
@@ -67,14 +80,29 @@ void StepCell::mouseDrag(const visage::MouseEvent& e)
   int dy = mDragStartY - e.y;
   if (std::abs(dy) > 3)
   {
-    // Vertical drag adjusts velocity
-    float newVel = mDragStartVelocity + static_cast<float>(dy) * 0.01f;
-    newVel = std::max(0.0f, std::min(1.0f, newVel));
-    if (newVel != mVelocity)
+    if (mIsShiftDrag)
     {
-      mVelocity = newVel;
-      mOnVelocityChange.call(mVelocity);
-      redraw();
+      // Shift+drag adjusts probability
+      float newProb = mDragStartProbability + static_cast<float>(dy) * 0.01f;
+      newProb = std::max(0.0f, std::min(1.0f, newProb));
+      if (newProb != mProbability)
+      {
+        mProbability = newProb;
+        mOnProbabilityChange.call(mProbability);
+        redraw();
+      }
+    }
+    else
+    {
+      // Normal drag adjusts velocity
+      float newVel = mDragStartVelocity + static_cast<float>(dy) * 0.01f;
+      newVel = std::max(0.0f, std::min(1.0f, newVel));
+      if (newVel != mVelocity)
+      {
+        mVelocity = newVel;
+        mOnVelocityChange.call(mVelocity);
+        redraw();
+      }
     }
   }
 }
@@ -92,6 +120,23 @@ void StepCell::mouseUp(const visage::MouseEvent& e)
       mOnToggle.call(mActive);
       redraw();
     }
+  }
+}
+
+void StepCell::mouseRightClick(const visage::MouseEvent& /*e*/)
+{
+  // Right-click toggles accent mode
+  mAccent = !mAccent;
+  mOnAccentToggle.call(mAccent);
+  redraw();
+}
+
+void StepCell::setAccent(bool accent)
+{
+  if (mAccent != accent)
+  {
+    mAccent = accent;
+    redraw();
   }
 }
 

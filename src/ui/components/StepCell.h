@@ -18,6 +18,7 @@ public:
   void mouseDown(const visage::MouseEvent& e) override;
   void mouseDrag(const visage::MouseEvent& e) override;
   void mouseUp(const visage::MouseEvent& e) override;
+  void mouseRightClick(const visage::MouseEvent& e) override;
 
   // -----------------------------------------------------------------------
   // State setters (called by StepGrid)
@@ -55,21 +56,35 @@ public:
   /// Called when the user drags to change velocity: void(float velocity)
   auto& onVelocityChange() { return mOnVelocityChange; }
 
+  /// Called when shift+drag changes probability: void(float probability)
+  auto& onProbabilityChange() { return mOnProbabilityChange; }
+
+  /// Called when right-click toggles accent: void(bool accent)
+  auto& onAccentToggle() { return mOnAccentToggle; }
+
+  bool isAccent() const { return mAccent; }
+  void setAccent(bool accent);
+
 private:
   bool  mActive       = false;
   float mVelocity     = 1.0f;
   float mProbability  = 1.0f;
   bool  mIsPlayhead   = false;
+  bool  mAccent       = false;
 
   // Flash animation state
   static constexpr float kFlashDurationMs = 80.0f;
   float mFlashTimer = 0.0f;  // counts down from kFlashDurationMs to 0
 
   // Drag state
-  int   mDragStartY       = 0;
-  float mDragStartVelocity = 0.0f;
-  bool  mIsDragging        = false;
+  int   mDragStartY          = 0;
+  float mDragStartVelocity   = 0.0f;
+  float mDragStartProbability = 0.0f;
+  bool  mIsDragging          = false;
+  bool  mIsShiftDrag         = false;
 
   visage::CallbackList<void(bool)>  mOnToggle;
   visage::CallbackList<void(float)> mOnVelocityChange;
+  visage::CallbackList<void(float)> mOnProbabilityChange;
+  visage::CallbackList<void(bool)>  mOnAccentToggle;
 };

@@ -75,6 +75,17 @@ SequencerEngine::SequencerEngine()
   // Generate initial Euclidean pattern
   Algorithms::generateEuclidean(mStepCount, mEuclideanHits, mEuclideanRotation,
                                 mEuclideanPattern, MAX_STEPS);
+
+  // Initialize parameter smoothers with defaults
+  const double kDefaultCoeff = ParamSmoother::makeCoefficient(15.0, 44100.0);
+  mDensitySmoother.setCoefficient(kDefaultCoeff);
+  mDensitySmoother.reset(mGlobalDensity);
+  mSwingSmoother.setCoefficient(kDefaultCoeff);
+  mSwingSmoother.reset(mSwing);
+  mVelocityCurveSmoother.setCoefficient(kDefaultCoeff);
+  mVelocityCurveSmoother.reset(mVelocityCurve);
+  mMutationRateSmoother.setCoefficient(kDefaultCoeff);
+  mMutationRateSmoother.reset(mMutationRate);
 }
 
 // ----------------------------------------------------------------------------
@@ -84,6 +95,11 @@ SequencerEngine::SequencerEngine()
 void SequencerEngine::setSampleRate(double sr)
 {
   mSampleRate = sr;
+  const double coeff = ParamSmoother::makeCoefficient(15.0, sr);
+  mDensitySmoother.setCoefficient(coeff);
+  mSwingSmoother.setCoefficient(coeff);
+  mVelocityCurveSmoother.setCoefficient(coeff);
+  mMutationRateSmoother.setCoefficient(coeff);
 }
 
 void SequencerEngine::setTempo(double bpm)
@@ -120,6 +136,7 @@ void SequencerEngine::setGlobalDensity(double density)
   if (density < 0.0) density = 0.0;
   if (density > 1.0) density = 1.0;
   mGlobalDensity = density;
+  mDensitySmoother.setTarget(density);
 }
 
 void SequencerEngine::setSeed(uint64_t seed)
@@ -223,6 +240,11 @@ void SequencerEngine::reset()
   mCycleCount      = 0;
   mNoteTracker.reset();
   mRng.seed(static_cast<std::mt19937::result_type>(mSeed));
+  // Snap smoothers to current parameter values so there's no glide after reset
+  mDensitySmoother.reset(mGlobalDensity);
+  mSwingSmoother.reset(mSwing);
+  mVelocityCurveSmoother.reset(mVelocityCurve);
+  mMutationRateSmoother.reset(mMutationRate);
 }
 
 // ----------------------------------------------------------------------------
@@ -245,6 +267,12 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
   if (mTransport.hasTransportJustStarted())
     reset();
 
+  // Advance smoothers once per block (efficient: avoids per-sample overhead)
+  const double smoothedDensity       = mDensitySmoother.process();
+  const double smoothedSwing         = mSwingSmoother.process();
+  const double smoothedVelocityCurve = mVelocityCurveSmoother.process();
+  const double smoothedMutationRate  = mMutationRateSmoother.process();
+
   if (!isPlaying)
     return;
 
@@ -256,13 +284,18 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
   int nOff = mNoteTracker.checkNoteOffs(blockEnd, noteOffBuffer);
   for (int i = 0; i < nOff && mNoteOffCount < MAX_POLYPHONY; ++i)
   {
+    const double offBeat = noteOffBuffer[i].noteOffBeat;
     MidiNote& off    = mNoteOffNotes[mNoteOffCount++];
     off.pitch        = noteOffBuffer[i].pitch;
     off.velocity     = 0;
     off.channel      = noteOffBuffer[i].channel;
-    off.startBeat    = blockEnd;
+    off.startBeat    = offBeat;
     off.durationBeats = 0.0;
-    off.sampleOffset = 0;
+    // Compute sample-accurate offset within this block
+    int sOff = mTransport.beatToSampleOffset(offBeat);
+    if (sOff < 0)        sOff = 0;
+    if (sOff >= nFrames) sOff = nFrames - 1;
+    off.sampleOffset = sOff;
   }
 
   // Walk through all steps that fall inside [blockStart, blockEnd)
@@ -270,7 +303,9 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
   while (mCurrentBeat < blockEnd && mOutputNoteCount < MAX_POLYPHONY)
   {
     if (mCurrentBeat >= blockStart)
-      generateStepNotes(mCurrentStep, mCurrentBeat, nFrames);
+      generateStepNotes(mCurrentStep, mCurrentBeat, nFrames,
+                        smoothedDensity, smoothedSwing,
+                        smoothedVelocityCurve, smoothedMutationRate);
 
     mCurrentBeat += sDur;
     mCurrentStep  = (mCurrentStep + 1) % mStepCount;
@@ -278,10 +313,10 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
     if (mCurrentStep == 0)
     {
       ++mCycleCount;
-      if (mMutationRate > 0.0)
+      if (smoothedMutationRate > 0.0)
       {
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        if (dist(mRng) < mMutationRate)
+        if (dist(mRng) < smoothedMutationRate)
         {
           mSeed = mRng();
           regeneratePattern();
@@ -291,7 +326,9 @@ void SequencerEngine::processBlock(double ppqPos, double tempo, bool isPlaying,
   }
 }
 
-void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFrames)
+void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFrames,
+                                        double density, double swing,
+                                        double velocityCurve, double /*mutationRate*/)
 {
   if (!mEuclideanPattern[stepIndex])
     return;
@@ -309,17 +346,17 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
   }
   else if (step.conditionMode == ConditionMode::Fill)
   {
-    if (mGlobalDensity < 0.8)
+    if (density < 0.8)
       return;
   }
   else if (step.conditionMode == ConditionMode::PreFill)
   {
-    if (mGlobalDensity >= 0.8)
+    if (density >= 0.8)
       return;
   }
 
-  // Probability gate
-  double effectiveProbability = step.probability * mGlobalDensity;
+  // Probability gate (uses smoothed density from processBlock)
+  double effectiveProbability = step.probability * density;
   if (effectiveProbability < 1.0)
   {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
@@ -359,8 +396,8 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
   if (baseVel > 127.0) baseVel = 127.0;
 
   // Velocity curve
-  if (mVelocityCurve != 1.0)
-    baseVel = 127.0 * std::pow(baseVel / 127.0, mVelocityCurve);
+  if (velocityCurve != 1.0)
+    baseVel = 127.0 * std::pow(baseVel / 127.0, velocityCurve);
 
   // Ratchets
   int ratchetCount = step.ratchetCount;
@@ -369,7 +406,7 @@ void SequencerEngine::generateStepNotes(int stepIndex, double stepBeat, int nFra
 
   const double sDur        = stepDuration();
   const double ratchetDur  = sDur / static_cast<double>(ratchetCount);
-  const double swingOffset = (stepIndex % 2 == 1) ? mSwing * sDur : 0.0;
+  const double swingOffset = (stepIndex % 2 == 1) ? swing * sDur : 0.0;
 
   for (int r = 0; r < ratchetCount && mOutputNoteCount < MAX_POLYPHONY; ++r)
   {
@@ -419,6 +456,7 @@ void SequencerEngine::setSwing(double swing)
   if (swing < 0.0) swing = 0.0;
   if (swing > 0.5) swing = 0.5;
   mSwing = swing;
+  mSwingSmoother.setTarget(swing);
 }
 
 void SequencerEngine::setMutationRate(double rate)
@@ -426,6 +464,7 @@ void SequencerEngine::setMutationRate(double rate)
   if (rate < 0.0) rate = 0.0;
   if (rate > 1.0) rate = 1.0;
   mMutationRate = rate;
+  mMutationRateSmoother.setTarget(rate);
 }
 
 void SequencerEngine::setVelocityCurve(double curve)
@@ -433,6 +472,7 @@ void SequencerEngine::setVelocityCurve(double curve)
   if (curve < 0.1) curve = 0.1;
   if (curve > 4.0) curve = 4.0;
   mVelocityCurve = curve;
+  mVelocityCurveSmoother.setTarget(curve);
 }
 
 void SequencerEngine::setOctaveRange(int low, int high)

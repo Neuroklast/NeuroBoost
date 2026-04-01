@@ -281,3 +281,99 @@ with user-supplied matrices and all-zero rows.
 **Prevention:**
 Add a `rowSum <= 0` guard in `generateMarkov`. Test explicitly: pass an
 all-zero 12×12 matrix and verify the output is still valid pitch classes [0,11].
+
+---
+
+## Sprint 5 Lessons
+
+### Lesson S5-1: 1-Pole IIR for Realtime Parameter Smoothing
+
+**Category:** Realtime Safety / Audio Quality
+
+**What happened:**
+Moving knobs caused audible "zipper noise" because raw parameter values changed
+instantly in the audio thread.
+
+**Lesson:**
+A simple 1-pole IIR smoother (`current += coeff * (target - current)`) eliminates
+zipper noise with near-zero CPU cost. Choosing ~15 Hz cutoff gives ~64ms glide —
+smooth enough for knob automation, fast enough for performance use.
+
+**Key rules:**
+- Smoother lives in DSP layer only (`src/dsp/ParamSmoother.h`)
+- `setTarget()` is called from the control thread; `process()` runs in the audio thread
+- `reset()` snaps immediately (e.g., on transport reset — no glide after jump)
+- Recalculate coefficient in `setSampleRate()` to stay accurate across sample rates
+
+---
+
+### Lesson S5-2: Host Automation Sync (OnIdle Polling)
+
+**Category:** Plugin Integration
+
+**What happened:**
+When a DAW automated a parameter via a ramp, the UI knob stayed frozen at its
+initial position because `OnIdle()` only polled the playhead queue.
+
+**Lesson:**
+`OnIdle()` must iterate ALL parameter indices and call `knob->setValueFromHost()`
+for each. Use a separate `setValueFromHost()` that updates the visual without
+re-firing the `onValueChange` callback (which would create an automation feedback loop).
+
+---
+
+### Lesson S5-3: Always Begin/End InformHostOfParamChange
+
+**Category:** Plugin Integration / DAW Automation
+
+**What happened:**
+DAW automation recording did not work because `SendParameterValueFromUI` was
+called without the required `BeginInformHostOfParamChange` / `EndInformHostOfParamChange` wrapper.
+
+**Lesson:**
+Every UI-initiated parameter change must be wrapped:
+```
+BeginInformHostOfParamChange(idx);
+GetParam(idx)->Set(value);
+SendParameterValueFromUI(idx, GetParam(idx)->GetNormalized());
+EndInformHostOfParamChange(idx);
+```
+This tells the DAW that a user gesture started and ended, enabling proper automation lane recording.
+
+---
+
+### Lesson S5-4: Panic Note-Offs for Hung Notes
+
+**Category:** MIDI Safety
+
+**What happened:**
+When the DAW stopped transport or the plugin window was closed while notes were
+playing, the notes hung indefinitely because no Note-Off was sent.
+
+**Lesson:**
+Three hooks are needed for complete panic coverage:
+1. `OnActivate(false)` — host bypasses the plugin
+2. `CloseWindow()` — UI is torn down
+3. `processBlock()` transport-stop transition — isPlaying goes false
+
+In all cases: call `panicAllNotes()` on the NoteTracker, then send `IMidiMsg::MakeNoteOffMsg`
+for each returned active note BEFORE resetting engine state.
+
+---
+
+### Lesson S5-5: Structural UI Tests Without GPU
+
+**Category:** Testing Strategy
+
+**What happened:**
+Visage UI requires GPU rendering which is unavailable in CI environments.
+A "pixel-perfect screenshot" approach would fail in headless CI.
+
+**Lesson:**
+Separate the "structure" concern from the "rendering" concern:
+- **Structure tests** (runnable in CI): mock the component tree with plain C++ structs,
+  verify bounds, option counts, callbacks, and state transitions.
+- **ASCII dump**: serialize the mock component tree to a text file and store as CI artifact.
+  Compare against a checked-in reference on subsequent runs.
+- This provides high confidence that UI logic is correct without GPU dependency.
+

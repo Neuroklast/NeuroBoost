@@ -43,6 +43,10 @@ public:
   /// Reflect the current transport running state.
   void setPlaying(bool playing);
 
+  /// Update a knob's visual display from a host automation change.
+  /// Does NOT fire the onValueChange callback back to the engine.
+  void updateKnobFromHost(int paramIdx, double value);
+
   // -----------------------------------------------------------------------
   // Layout constants (matches 900×600 default size)
   // -----------------------------------------------------------------------
@@ -56,9 +60,15 @@ private:
   std::function<double(int)>       mGetParam;
   std::function<void(int, double)> mSetParam;
   std::function<void(int, bool)>   mOnStepActiveChanged;
+  std::function<void(int, double)> mOnStepVelocityChanged;
+  std::function<void(int, double)> mOnStepProbabilityChanged;
+  std::function<void(int, bool)>   mOnStepAccentToggled;
 
 public:
   void setOnStepActiveChanged(std::function<void(int, bool)> cb) { mOnStepActiveChanged = std::move(cb); }
+  void setOnStepVelocityChanged(std::function<void(int, double)> cb) { mOnStepVelocityChanged = std::move(cb); }
+  void setOnStepProbabilityChanged(std::function<void(int, double)> cb) { mOnStepProbabilityChanged = std::move(cb); }
+  void setOnStepAccentToggled(std::function<void(int, bool)> cb) { mOnStepAccentToggled = std::move(cb); }
 
 private:
 

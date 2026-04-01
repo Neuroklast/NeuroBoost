@@ -102,15 +102,33 @@ The next step is Sprint 3: full Visage UI redesign (step grid, knobs, visualizer
 - [x] C2: Engine tests (multi-mode, note-offs, stepCount=1, regeneratePattern)
 - [x] D1-D3: Docs updated
 
-### Sprint 3 – Full Visage UI Redesign (Next)
+### Sprint 3 – Full Visage UI Redesign ✅
 
-- [ ] Step grid component (64 cells, playhead, click to toggle)
-- [ ] Mode selector dropdown
-- [ ] Scale/root note selector
-- [ ] Per-mode parameter panel (Euclidean hits/rotation, Fractal params, etc.)
-- [ ] Playhead animation via LockFreeQueue
-- [ ] Fractal visualizer
-- [ ] Preset system UI
+- [x] Step grid component (64 cells, playhead, click to toggle)
+- [x] Mode selector dropdown
+- [x] Scale/root note selector
+- [x] Per-mode parameter panel (Euclidean hits/rotation, Fractal params, etc.)
+- [x] Playhead animation via LockFreeQueue
+- [x] Transport bar (play/stop/reset)
+
+### Sprint 4 – SequencerEngine Hardening ✅
+
+- [x] Ratchets, swing, condition modes, mutation, velocity curve, octave range
+- [x] Markov/L-System/CA/Fractal parameter accessors
+- [x] State serialization (SerializeState / UnserializeState)
+- [x] 10 factory presets via Presets.h
+- [x] 133 DSP tests passing
+
+### Sprint 5 – Alpha-Quality Polish + Visual UI Tests ✅
+
+- [x] Parameter smoothing (ParamSmoother 1-pole IIR, Goal 1)
+- [x] Fix OnIdle() host sync — knobs update from automation (Goal 2)
+- [x] Full StepGrid interaction: shift+drag probability, right-click accent (Goal 3)
+- [x] Knob↔host normalization + Begin/EndInformHostOfParamChange (Goal 4)
+- [x] Hardened Note-Off: sample-accurate offsets, new timing tests (Goal 5)
+- [x] Panic on transport stop/bypass/close — sendPanicNoteOffs() (Goal 6)
+- [x] UI structure test (test_ui_structure.cpp + ASCII dump) (Goal 7)
+- [x] 156 DSP tests + 38 UI structure tests passing
 
 ---
 
@@ -205,8 +223,8 @@ The next step is Sprint 3: full Visage UI redesign (step grid, knobs, visualizer
 | # | Severity | Issue | File | Status |
 |---|----------|-------|------|--------|
 | 1 | 🔴 High | `SendParameterValueFromUI` passes raw gain value instead of normalized (0–1) | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 2) |
-| 2 | 🔴 High | No parameter smoothing in ProcessBlock → zipper noise on automation | `src/NeuroBoost.cpp` | N/A (MIDI sequencer, no audio processing) |
-| 3 | 🟡 Med | `OnIdle()` is empty → host automation changes don't sync to UI knob | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 2) |
+| 2 | 🔴 High | No parameter smoothing in ProcessBlock → zipper noise on automation | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 5, ParamSmoother) |
+| 3 | 🟡 Med | `OnIdle()` is empty → host automation changes don't sync to UI knob | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 5, updateKnobFromHost) |
 | 4 | 🟡 Med | `EParams` enum defined in both `NeuroBoost.h` and `NeuroBoostDSP.h` → ODR violation risk | both | Open (NeuroBoostDSP.h kept for legacy DSP tests) |
 | 5 | 🟢 Low | `config.h` copyright says 2024, should be 2025 | `config.h:9` | ✅ Fixed (Sprint 2) |
 | 6 | 🟢 Low | README references LICENSE file which does not exist | `README.md` | Open |

@@ -36,7 +36,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
+        cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
     
     - name: Build DSP Test
       run: |
@@ -56,6 +56,23 @@ jobs:
         else
           ./build/bin/test_sequencer
         fi
+
+    - name: Run UI structure tests manually
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ./build/bin/Release/test_ui_structure.exe
+        else
+          ./build/bin/test_ui_structure
+        fi
+
+    - name: Upload UI structure artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ui-structure-${{ matrix.os }}
+        path: tests/screenshots/
+        if-no-files-found: ignore
 
   build-full-plugin:
     name: Build Full Plugin (Ubuntu)
@@ -101,10 +118,10 @@ jobs:
         cd build
         if [ -f ../deps/visage/build/libvisage.a ]; then
           echo "Visage built successfully, building full plugin..."
-          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_VST3=ON -DBUILD_STANDALONE=ON ..
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=ON -DBUILD_STANDALONE=ON ..
         else
           echo "Visage not available, building DSP test only..."
-          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
         fi
     
     - name: Build NeuroBoost
