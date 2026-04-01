@@ -104,10 +104,12 @@ jobs:
       run: |
         mkdir -p deps
         cd deps
-        git clone https://github.com/iPlug2/iPlug2.git
+        git clone --depth 1 --branch master https://github.com/iPlug2/iPlug2.git || \
+          git clone https://github.com/iPlug2/iPlug2.git
         cd iPlug2
+        git fetch --unshallow 2>/dev/null || true
         git checkout 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
-        git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
+        git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
     
     - name: Clone Visage
       run: |
@@ -128,9 +130,13 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        if [ -f ../deps/visage/build/libvisage.a ]; then
-          echo "Visage built successfully, building full plugin..."
+        VST3_HEADER="../deps/iPlug2/Dependencies/IPlug/VST3_SDK/public.sdk/source/vst/vstsinglecomponenteffect.h"
+        if [ -f ../deps/visage/build/libvisage.a ] && [ -f "$VST3_HEADER" ]; then
+          echo "Visage and VST3 SDK available, building full plugin..."
           cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=ON -DBUILD_STANDALONE=ON ..
+        elif [ -f ../deps/visage/build/libvisage.a ]; then
+          echo "Visage available but VST3 SDK missing, building without VST3..."
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
         else
           echo "Visage not available, building DSP test only..."
           cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
