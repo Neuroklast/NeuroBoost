@@ -104,17 +104,19 @@ jobs:
       run: |
         mkdir -p deps
         cd deps
-        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+        git clone https://github.com/iPlug2/iPlug2.git
         cd iPlug2
+        git checkout 4ca7bc02d1d0bc05e7d1c2c6b0d7c1aa0eca2bef
         git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
     
     - name: Clone Visage
       run: |
         cd deps
-        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/VitalAudio/visage.git
+        git clone https://github.com/VitalAudio/visage.git
+        cd visage
+        git checkout b0b2ee89abb3f1173dad4d80460197eb96afa724
     
     - name: Build Visage
-      continue-on-error: true
       run: |
         cd deps/visage
         mkdir -p build

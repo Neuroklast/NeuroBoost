@@ -194,7 +194,9 @@ void NeuroBoost::OnParamChange(int paramIdx)
 void* NeuroBoost::OpenWindow(void* pParent)
 {
   mEditor = std::make_unique<visage::ApplicationEditor>();
-  visage::IBounds bounds = visage::computeWindowBounds(PLUG_WIDTH, PLUG_HEIGHT);
+  visage::IBounds bounds = visage::computeWindowBounds(
+    visage::Dimension::logicalPixels(PLUG_WIDTH),
+    visage::Dimension::logicalPixels(PLUG_HEIGHT));
   mEditor->setBounds(0, 0, bounds.width(), bounds.height());
 
   // Build the EditorView, wiring parameter get/set through the plugin
@@ -223,7 +225,10 @@ void* NeuroBoost::OpenWindow(void* pParent)
     mEngine.setStepAccent(step, accent);
   });
 
-  mWindow = visage::createPluginWindow(mEditor->width(), mEditor->height(), pParent);
+  mWindow = visage::createPluginWindow(
+    visage::Dimension::logicalPixels(mEditor->width()),
+    visage::Dimension::logicalPixels(mEditor->height()),
+    pParent);
   mWindow->setFixedAspectRatio(mEditor->isFixedAspectRatio());
   mEditor->addToWindow(mWindow.get());
   mWindow->show();
@@ -237,7 +242,7 @@ void NeuroBoost::OnParentWindowResize(int width, int height)
   if (mWindow)
   {
     mWindow->setWindowSize(width, height);
-    mEditor->setDimensions(width, height);
+    mEditor->setBounds(0, 0, static_cast<float>(width), static_cast<float>(height));
 
     if (mEditorView)
       mEditorView->setBounds(0, 0, width, height);

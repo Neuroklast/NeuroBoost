@@ -198,6 +198,8 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         ${IPLUG_INCLUDES}
         ${VISAGE_INCLUDES}
     )
+    # resource.h is at project root — iPlug2 Windows builds expect it in the include path.
+    # CMAKE_SOURCE_DIR is already listed above, so resource.h will be found automatically.
     
     # Common compile definitions
     set(COMMON_DEFINITIONS
@@ -465,7 +467,21 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${COMMON_DEFINITIONS}
             VST3_API
             IPLUG_VST3
+            NEUROBOOST_FONT_PATH="${VISAGE_ROOT}/visage_graphics/fonts/Lato-Regular.ttf"
         )
+        
+        # MSVC-specific options
+        if(MSVC)
+            target_compile_options(NeuroBoost_VST3 PRIVATE
+                /wd4068   # suppress unknown pragma warnings (#pragma mark)
+                /wd4100   # suppress unreferenced formal parameter
+            )
+            # Windows SDK headers for ASIO/RTAudio COM support
+            target_compile_definitions(NeuroBoost_VST3 PRIVATE
+                WIN32_LEAN_AND_MEAN
+                NOMINMAX
+            )
+        endif()
         
         target_link_libraries(NeuroBoost_VST3 PRIVATE ${VISAGE_LIBRARY} ${PLATFORM_LIBS})
         

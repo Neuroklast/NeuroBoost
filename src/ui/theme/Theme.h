@@ -2,6 +2,22 @@
 // NeuroBoost Theme — Centralized color definitions
 // All VISAGE_THEME_COLOR declarations for the NeuroBoost UI.
 
+#ifdef IPLUG_EDITOR
+#include "visage_graphics/font.h"
+#include <string>
+
+// Create a Font from the bundled Lato typeface.
+// NEUROBOOST_FONT_PATH must be defined (see CMakeLists.txt).
+inline visage::Font makeFont(float size) {
+#ifdef NEUROBOOST_FONT_PATH
+  static const std::string kFontPath = NEUROBOOST_FONT_PATH;
+  return visage::Font(size, kFontPath);
+#else
+  return visage::Font();
+#endif
+}
+#endif
+
 // Background
 VISAGE_THEME_COLOR(BackgroundColor,   0xff0d0d1a);  // Dark space background
 VISAGE_THEME_COLOR(PanelColor,        0xff1a1a2e);  // Panel background

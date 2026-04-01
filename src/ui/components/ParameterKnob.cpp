@@ -62,13 +62,13 @@ void ParameterKnob::draw(visage::Canvas& canvas)
   canvas.circle(dotX - dotRadius, dotY - dotRadius, dotRadius * 2.0f);
 
   // Label text
-  visage::Font labelFont(11);
+  visage::Font labelFont = makeFont(11.0f);
   canvas.setColor(TextDimColor);
   canvas.text(mLabel.c_str(), labelFont, visage::Font::kCenter,
               0.0f, knobArea, w, 12.0f);
 
   // Value text
-  visage::Font valueFont(10);
+  visage::Font valueFont = makeFont(10.0f);
   canvas.setColor(TextColor);
   std::string valStr = formatValue();
   canvas.text(valStr.c_str(), valueFont, visage::Font::kCenter,
@@ -77,8 +77,20 @@ void ParameterKnob::draw(visage::Canvas& canvas)
 
 void ParameterKnob::mouseDown(const visage::MouseEvent& e)
 {
+  if (e.repeatClickCount() >= 2)
+  {
+    // Double-click resets to default value
+    if (mValue != mDefaultVal)
+    {
+      mValue = mDefaultVal;
+      mOnValueChange.callback(mValue);
+      redraw();
+    }
+    return;
+  }
+
   mIsDragging    = true;
-  mDragStartY    = e.y;
+  mDragStartY    = static_cast<int>(e.position.y);
   mDragStartValue = mValue;
   mShiftHeld     = e.isShiftDown();
 }
@@ -88,7 +100,7 @@ void ParameterKnob::mouseDrag(const visage::MouseEvent& e)
   if (!mIsDragging)
     return;
 
-  int dy = mDragStartY - e.y;
+  int dy = mDragStartY - static_cast<int>(e.position.y);
   bool shift = e.isShiftDown();
   double sensitivity = shift ? 0.0005 : 0.005;
   double range       = mMaxVal - mMinVal;
@@ -99,7 +111,7 @@ void ParameterKnob::mouseDrag(const visage::MouseEvent& e)
   if (newValue != mValue)
   {
     mValue = newValue;
-    mOnValueChange.call(mValue);
+    mOnValueChange.callback(mValue);
     redraw();
   }
 }
@@ -109,29 +121,20 @@ void ParameterKnob::mouseUp(const visage::MouseEvent& /*e*/)
   mIsDragging = false;
 }
 
-void ParameterKnob::mouseDoubleClick(const visage::MouseEvent& /*e*/)
-{
-  if (mValue != mDefaultVal)
-  {
-    mValue = mDefaultVal;
-    mOnValueChange.call(mValue);
-    redraw();
-  }
-}
-
-void ParameterKnob::mouseWheelMove(const visage::MouseEvent& e, float deltaY)
+bool ParameterKnob::mouseWheel(const visage::MouseEvent& e)
 {
   double range = mMaxVal - mMinVal;
   bool shift   = e.isShiftDown();
   double step  = shift ? range * 0.001 : range * 0.01;
-  double newValue = std::max(mMinVal, std::min(mMaxVal, mValue + deltaY * step));
+  double newValue = std::max(mMinVal, std::min(mMaxVal, mValue + e.wheel_delta_y * step));
 
   if (newValue != mValue)
   {
     mValue = newValue;
-    mOnValueChange.call(mValue);
+    mOnValueChange.callback(mValue);
     redraw();
   }
+  return true;
 }
 
 void ParameterKnob::setValue(double value)

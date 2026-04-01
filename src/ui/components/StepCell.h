@@ -18,7 +18,6 @@ public:
   void mouseDown(const visage::MouseEvent& e) override;
   void mouseDrag(const visage::MouseEvent& e) override;
   void mouseUp(const visage::MouseEvent& e) override;
-  void mouseRightClick(const visage::MouseEvent& e) override;
 
   // -----------------------------------------------------------------------
   // State setters (called by StepGrid)

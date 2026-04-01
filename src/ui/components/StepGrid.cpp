@@ -11,19 +11,19 @@ StepGrid::StepGrid()
 
     int idx = i;  // capture by value
     mCells[i].onToggle() = [this, idx](bool active) {
-      mOnStepToggled.call(idx, active);
+      mOnStepToggled.callback(idx, active);
     };
 
     mCells[i].onVelocityChange() = [this, idx](float vel) {
-      mOnVelocityChanged.call(idx, vel);
+      mOnVelocityChanged.callback(idx, vel);
     };
 
     mCells[i].onProbabilityChange() = [this, idx](float prob) {
-      mOnProbabilityChanged.call(idx, prob);
+      mOnProbabilityChanged.callback(idx, prob);
     };
 
     mCells[i].onAccentToggle() = [this, idx](bool accent) {
-      mOnAccentToggled.call(idx, accent);
+      mOnAccentToggled.callback(idx, accent);
     };
   }
 }

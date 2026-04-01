@@ -251,7 +251,7 @@ void EditorView::draw(visage::Canvas& canvas)
   canvas.fill(0.0f, 0.0f, W, hdrH);
 
   // Header title
-  visage::Font titleFont(22);
+  visage::Font titleFont = makeFont(22.0f);
   canvas.setColor(AccentColor);
   canvas.text("NeuroBoost", titleFont, visage::Font::kLeft,
               16.0f, 0.0f, 160.0f, hdrH);
@@ -293,7 +293,7 @@ void EditorView::drawPanelGroup(visage::Canvas& canvas,
   canvas.setColor(SelectorBorderColor);
   canvas.fill(x + 4.0f, y + 4.0f, w - 8.0f, 1.0f);
 
-  visage::Font groupFont(11);
+  visage::Font groupFont = makeFont(11.0f);
   canvas.setColor(AccentColor);
   canvas.text(title, groupFont, visage::Font::kCenter, x + 4.0f, y + 8.0f, w - 8.0f, 14.0f);
 }
