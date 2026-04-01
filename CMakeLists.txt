@@ -283,16 +283,35 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         )
     endif()
     
-    # Find Visage library
+    # Find Visage library - check multiple candidate locations
     set(VISAGE_LIBRARY "")
-    if(EXISTS "${VISAGE_ROOT}/build/libvisage.a")
-        set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/libvisage.a")
-    elseif(EXISTS "${VISAGE_ROOT}/build/Release/visage.lib")
-        set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/Release/visage.lib")
-    elseif(EXISTS "${VISAGE_ROOT}/build/Debug/visage.lib")
-        set(VISAGE_LIBRARY "${VISAGE_ROOT}/build/Debug/visage.lib")
-    elseif(TARGET visage)
+    foreach(_visage_candidate
+        "${VISAGE_ROOT}/build/libvisage.a"
+        "${VISAGE_ROOT}/build/Release/libvisage.a"
+        "${VISAGE_ROOT}/build/Release/visage.lib"
+        "${VISAGE_ROOT}/build/Debug/visage.lib"
+        "${VISAGE_ROOT}/build/lib/libvisage.a"
+        "${VISAGE_ROOT}/build/visage/libvisage.a"
+    )
+        if(EXISTS "${_visage_candidate}")
+            set(VISAGE_LIBRARY "${_visage_candidate}")
+            message(STATUS "Found Visage library: ${VISAGE_LIBRARY}")
+            break()
+        endif()
+    endforeach()
+    if(NOT VISAGE_LIBRARY AND TARGET visage)
         set(VISAGE_LIBRARY visage)
+    endif()
+    # Fallback: search recursively under build/
+    if(NOT VISAGE_LIBRARY AND EXISTS "${VISAGE_ROOT}/build")
+        file(GLOB_RECURSE _visage_search
+            "${VISAGE_ROOT}/build/**/libvisage.a"
+            "${VISAGE_ROOT}/build/**/visage.lib"
+        )
+        if(_visage_search)
+            list(GET _visage_search 0 VISAGE_LIBRARY)
+            message(STATUS "Found Visage library via search: ${VISAGE_LIBRARY}")
+        endif()
     endif()
     
     # Build Visage if not already built
@@ -390,85 +409,87 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     endif()
     
     # Create VST3 target
-    if(BUILD_VST3 AND EXISTS "${IPLUG2_ROOT}" AND VISAGE_LIBRARY)
+    if(BUILD_VST3 AND EXISTS "${IPLUG2_ROOT}")
+        if(NOT VISAGE_LIBRARY)
+            message(FATAL_ERROR "BUILD_VST3=ON but Visage library not found. "
+                "Build Visage first or set VISAGE_LIBRARY manually.")
+        endif()
         message(STATUS "Configuring VST3 plugin...")
         
         set(VST3_SDK_ROOT "${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK")
         
-        if(EXISTS "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.h")
-            set(VST3_INCLUDES
-                ${VST3_SDK_ROOT}
-                ${VST3_SDK_ROOT}/base/source
-                ${VST3_SDK_ROOT}/pluginterfaces
-                ${VST3_SDK_ROOT}/public.sdk/source/common
-                ${VST3_SDK_ROOT}/public.sdk/source/vst
-                ${VST3_SDK_ROOT}/public.sdk/source/vst/hosting
-            )
-            
-            file(GLOB VST3_SDK_SOURCES
-                "${VST3_SDK_ROOT}/base/source/*.cpp"
-                "${VST3_SDK_ROOT}/public.sdk/source/common/*.cpp"
-                "${VST3_SDK_ROOT}/public.sdk/source/vst/*.cpp"
-            )
-            
-            set(IPLUG_VST3_SOURCES
-                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3.cpp
-                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Controller.cpp
-                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Processor.cpp
-                ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp
-            )
-            
-            set(VST3_SOURCES
-                ${PLUGIN_SOURCES}
-                ${IPLUG_CORE_SOURCES}
-                ${IPLUG_VST3_SOURCES}
-                ${VST3_SDK_SOURCES}
-                ${SWELL_SOURCES}
-            )
-            
-            add_library(NeuroBoost_VST3 MODULE ${VST3_SOURCES})
-            
-            target_include_directories(NeuroBoost_VST3 PRIVATE 
-                ${COMMON_INCLUDES}
-                ${VST3_INCLUDES}
-            )
-            
-            target_compile_definitions(NeuroBoost_VST3 PRIVATE 
-                ${COMMON_DEFINITIONS}
-                VST3_API
-                IPLUG_VST3
-            )
-            
-            target_link_libraries(NeuroBoost_VST3 PRIVATE ${VISAGE_LIBRARY} ${PLATFORM_LIBS})
-            
+        if(NOT EXISTS "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.h")
+            message(FATAL_ERROR "VST3 SDK header not found at "
+                "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.h\n"
+                "Run: cd ${IPLUG2_ROOT} && git submodule update --init --recursive Dependencies/IPlug/VST3_SDK")
+        endif()
+        
+        set(VST3_INCLUDES
+            ${VST3_SDK_ROOT}
+            ${VST3_SDK_ROOT}/base/source
+            ${VST3_SDK_ROOT}/pluginterfaces
+            ${VST3_SDK_ROOT}/public.sdk/source/common
+            ${VST3_SDK_ROOT}/public.sdk/source/vst
+            ${VST3_SDK_ROOT}/public.sdk/source/vst/hosting
+        )
+        
+        file(GLOB VST3_SDK_SOURCES
+            "${VST3_SDK_ROOT}/base/source/*.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/common/*.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/*.cpp"
+        )
+        
+        set(IPLUG_VST3_SOURCES
+            ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3.cpp
+            ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Controller.cpp
+            ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Processor.cpp
+            ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp
+        )
+        
+        set(VST3_SOURCES
+            ${PLUGIN_SOURCES}
+            ${IPLUG_CORE_SOURCES}
+            ${IPLUG_VST3_SOURCES}
+            ${VST3_SDK_SOURCES}
+            ${SWELL_SOURCES}
+        )
+        
+        add_library(NeuroBoost_VST3 MODULE ${VST3_SOURCES})
+        
+        target_include_directories(NeuroBoost_VST3 PRIVATE 
+            ${COMMON_INCLUDES}
+            ${VST3_INCLUDES}
+        )
+        
+        target_compile_definitions(NeuroBoost_VST3 PRIVATE 
+            ${COMMON_DEFINITIONS}
+            VST3_API
+            IPLUG_VST3
+        )
+        
+        target_link_libraries(NeuroBoost_VST3 PRIVATE ${VISAGE_LIBRARY} ${PLATFORM_LIBS})
+        
+        set_target_properties(NeuroBoost_VST3 PROPERTIES
+            OUTPUT_NAME "NeuroBoost"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vst3"
+            PREFIX ""
+        )
+        
+        if(APPLE)
             set_target_properties(NeuroBoost_VST3 PROPERTIES
-                OUTPUT_NAME "NeuroBoost"
-                LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vst3"
-                PREFIX ""
+                SUFFIX ".vst3"
             )
-            
-            if(APPLE)
-                set_target_properties(NeuroBoost_VST3 PROPERTIES
-                    BUNDLE TRUE
-                    BUNDLE_EXTENSION "vst3"
-                    MACOSX_BUNDLE_GUI_IDENTIFIER "com.neuroklast.neuroboost.vst3"
-                    MACOSX_BUNDLE_BUNDLE_NAME "NeuroBoost"
-                    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-                )
-            elseif(WIN32)
-                set_target_properties(NeuroBoost_VST3 PROPERTIES
-                    SUFFIX ".vst3"
-                )
-            else()
-                set_target_properties(NeuroBoost_VST3 PROPERTIES
-                    SUFFIX ".so"
-                )
-            endif()
+        elseif(WIN32)
+            set_target_properties(NeuroBoost_VST3 PROPERTIES
+                SUFFIX ".vst3"
+            )
         else()
-            message(WARNING "VST3 SDK not found at ${VST3_SDK_ROOT}")
+            set_target_properties(NeuroBoost_VST3 PROPERTIES
+                SUFFIX ".so"
+            )
         endif()
     elseif(BUILD_VST3)
-        message(WARNING "Cannot build VST3: iPlug2 or Visage not available")
+        message(FATAL_ERROR "Cannot build VST3: iPlug2 not found at ${IPLUG2_ROOT}")
     endif()
 endif()
 

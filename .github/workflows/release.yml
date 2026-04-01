@@ -49,9 +49,9 @@ jobs:
       run: |
         mkdir -p deps
         cd deps
-        git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+        git clone --depth 1 https://github.com/iPlug2/iPlug2.git
         cd iPlug2
-        git submodule update --init --recursive --depth 1 Dependencies/IPlug/VST3_SDK
+        git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
 
     # ── Clone Visage ────────────────────────────────────────────────────────
     - name: Clone Visage
@@ -90,6 +90,15 @@ jobs:
         cd build
         cmake --build . --config Release --parallel 2
 
+    # ── Debug: list what was built ──────────────────────────────────────────
+    - name: Debug - List build output
+      shell: bash
+      run: |
+        echo "=== build/vst3/ ==="
+        ls -laR build/vst3/ 2>/dev/null || echo "build/vst3/ does not exist"
+        echo "=== All plugin files ==="
+        find build -type f \( -name "*.vst3" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null || echo "none found"
+
     # ── Package artifact ────────────────────────────────────────────────────
     - name: Package VST3 artifact (Linux)
       if: runner.os == 'Linux'
@@ -102,7 +111,10 @@ jobs:
         elif [ -d build/vst3/NeuroBoost.vst3 ] || [ -f build/vst3/NeuroBoost.vst3 ]; then
           cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-linux.vst3
         else
-          echo "ERROR: No VST3 output found in build/vst3/" && ls -la build/vst3/ && exit 1
+          echo "ERROR: No VST3 output found in build/vst3/"
+          ls -laR build/vst3/ 2>/dev/null || echo "build/vst3/ does not exist"
+          find build -type f \( -name "*.vst3" -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null || echo "none found"
+          exit 1
         fi
         ls -la dist/
 
@@ -111,11 +123,18 @@ jobs:
       shell: bash
       run: |
         mkdir -p dist
-        # Find the .vst3 bundle wherever CMake placed it
+        # macOS: try directory bundle first, then flat file
         VST3_PATH=$(find build -name "NeuroBoost.vst3" -type d | head -n 1)
         if [ -z "$VST3_PATH" ]; then
-          echo "ERROR: No NeuroBoost.vst3 bundle found under build/"
-          find build -name "*.vst3" -o -name "*.dylib" | head -20
+          VST3_PATH=$(find build -name "NeuroBoost.vst3" -type f | head -n 1)
+        fi
+        if [ -z "$VST3_PATH" ]; then
+          VST3_PATH=$(find build -name "NeuroBoost.dylib" -type f | head -n 1)
+        fi
+        if [ -z "$VST3_PATH" ]; then
+          echo "ERROR: No NeuroBoost.vst3 or .dylib found under build/"
+          ls -laR build/vst3/ 2>/dev/null || echo "build/vst3/ does not exist"
+          find build -type f \( -name "*.vst3" -o -name "*.dylib" -o -name "*.so" \) 2>/dev/null || echo "none found"
           exit 1
         fi
         echo "Found VST3 at: $VST3_PATH"
@@ -127,10 +146,15 @@ jobs:
       shell: bash
       run: |
         mkdir -p dist
-        VST3_PATH=$(find build -name "NeuroBoost.vst3" -type d | head -n 1)
+        # Windows: .vst3 is a file (renamed .dll), not a directory bundle
+        VST3_PATH=$(find build -name "NeuroBoost.vst3" -type f | head -n 1)
         if [ -z "$VST3_PATH" ]; then
-          echo "ERROR: No NeuroBoost.vst3 bundle found under build/"
-          find build -name "*.vst3" -o -name "*.dll" | head -20
+          VST3_PATH=$(find build -name "NeuroBoost.dll" -type f | head -n 1)
+        fi
+        if [ -z "$VST3_PATH" ]; then
+          echo "ERROR: No NeuroBoost.vst3 or .dll found under build/"
+          ls -laR build/vst3/ 2>/dev/null || echo "build/vst3/ does not exist"
+          find build -type f \( -name "*.vst3" -o -name "*.dll" -o -name "*.so" \) 2>/dev/null || echo "none found"
           exit 1
         fi
         echo "Found VST3 at: $VST3_PATH"
