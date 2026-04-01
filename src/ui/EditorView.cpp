@@ -199,7 +199,6 @@ void EditorView::layoutWidgets()
   float hdrH       = kHeaderH     * scaleY;
   float gridW      = kGridW       * scaleX;
   float gridH      = kGridH       * scaleY;
-  float paramH     = kParamPanelH * scaleY;
   float transportH = kTransportH  * scaleY;
 
   // Preset browser (top strip)
@@ -253,8 +252,6 @@ void EditorView::layoutWidgets()
 
   // Transport bar
   mTransportBar->setBounds(0.0f, H - transportH, W, transportH);
-
-  (void)paramH; // used implicitly via knobY calculation
 }
 
 // ============================================================================

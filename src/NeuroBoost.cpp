@@ -363,7 +363,7 @@ void NeuroBoost::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
   while (!mMidiQueue.Empty())
   {
     IMidiMsg msg = mMidiQueue.Peek();
-    if (msg.mOffset > nFrames) break;
+    if (msg.mOffset >= nFrames) break;
     handleMidiInput(msg);
     mMidiQueue.Remove();
   }
