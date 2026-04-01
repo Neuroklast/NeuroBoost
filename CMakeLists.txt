@@ -425,9 +425,9 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         
         set(VST3_SDK_ROOT "${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK")
         
-        if(NOT EXISTS "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.h")
+        if(NOT EXISTS "${VST3_SDK_ROOT}/pluginterfaces/vst/ivstaudioprocessor.h")
             message(FATAL_ERROR "VST3 SDK header not found at "
-                "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.h\n"
+                "${VST3_SDK_ROOT}/pluginterfaces/vst/ivstaudioprocessor.h\n"
                 "Run: cd ${IPLUG2_ROOT} && git submodule update --init --recursive Dependencies/IPlug/VST3_SDK")
         endif()
         
@@ -440,16 +440,28 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${VST3_SDK_ROOT}/public.sdk/source/vst/hosting
         )
         
-        file(GLOB VST3_SDK_SOURCES
-            "${VST3_SDK_ROOT}/base/source/*.cpp"
-            "${VST3_SDK_ROOT}/public.sdk/source/common/*.cpp"
-            "${VST3_SDK_ROOT}/public.sdk/source/vst/*.cpp"
+        set(VST3_SDK_SOURCES
+            "${VST3_SDK_ROOT}/base/source/baseiids.cpp"
+            "${VST3_SDK_ROOT}/base/source/fdebug.cpp"
+            "${VST3_SDK_ROOT}/base/source/fobject.cpp"
+            "${VST3_SDK_ROOT}/base/source/fstring.cpp"
+            "${VST3_SDK_ROOT}/base/source/updatehandler.cpp"
+            "${VST3_SDK_ROOT}/base/thread/source/flock.cpp"
+            "${VST3_SDK_ROOT}/pluginterfaces/base/funknown.cpp"
+            "${VST3_SDK_ROOT}/pluginterfaces/base/ustring.cpp"
+            "${VST3_SDK_ROOT}/pluginterfaces/base/coreiids.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/common/pluginview.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/common/commoniids.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/vstbus.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/vstcomponent.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/vstcomponentbase.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/vstinitiids.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/vstparameters.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.cpp"
         )
         
         set(IPLUG_VST3_SOURCES
             ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3.cpp
-            ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Controller.cpp
-            ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Processor.cpp
             ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp
         )
         
@@ -509,6 +521,15 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         if(APPLE)
             set_target_properties(NeuroBoost_VST3 PROPERTIES
                 SUFFIX ".vst3"
+            )
+            # Create a proper macOS .vst3 bundle directory structure post-build
+            add_custom_command(TARGET NeuroBoost_VST3 POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "${CMAKE_BINARY_DIR}/vst3/NeuroBoost.vst3/Contents/MacOS"
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    "$<TARGET_FILE:NeuroBoost_VST3>"
+                    "${CMAKE_BINARY_DIR}/vst3/NeuroBoost.vst3/Contents/MacOS/NeuroBoost"
+                COMMENT "Creating macOS VST3 bundle structure"
             )
         elseif(WIN32)
             set_target_properties(NeuroBoost_VST3 PROPERTIES
