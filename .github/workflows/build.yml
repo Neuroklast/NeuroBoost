@@ -100,16 +100,31 @@ jobs:
           libgl1-mesa-dev libfreetype6-dev libharfbuzz-dev \
           libasound2-dev libgtk-3-dev pkg-config
     
-    - name: Clone iPlug2
+    - name: Clone iPlug2 + VST3 SDK
+      shell: bash
       run: |
+        set -e
         mkdir -p deps
-        cd deps
-        git clone --depth 1 --branch master https://github.com/iPlug2/iPlug2.git || \
-          git clone https://github.com/iPlug2/iPlug2.git
-        cd iPlug2
-        git fetch --unshallow 2>/dev/null || true
+        git clone https://github.com/iPlug2/iPlug2.git deps/iPlug2
+        cd deps/iPlug2
         git checkout 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
-        git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
+        cd ../..
+
+        # Clone VST3 SDK directly — more reliable than submodule init
+        VST3_SDK_DIR="deps/iPlug2/Dependencies/IPlug/VST3_SDK"
+        mkdir -p "$(dirname "$VST3_SDK_DIR")"
+        rm -rf "$VST3_SDK_DIR"
+        git clone --branch v3.7.7_build_19 --depth 1 \
+          https://github.com/steinbergmedia/vst3sdk.git "$VST3_SDK_DIR"
+        git -C "$VST3_SDK_DIR" submodule update --init --recursive
+
+        # Verify
+        VST3_HEADER="$VST3_SDK_DIR/pluginterfaces/vst/ivstaudioprocessor.h"
+        if [ ! -f "$VST3_HEADER" ]; then
+          echo "::error::VST3 SDK header not found: $VST3_HEADER"
+          exit 1
+        fi
+        echo "✅ VST3 SDK ready at $VST3_HEADER"
     
     - name: Clone Visage
       run: |
@@ -126,26 +141,48 @@ jobs:
         cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
         cmake --build . --config Release --parallel 2
     
-    - name: Configure NeuroBoost (DSP only if Visage failed)
+    - name: Configure NeuroBoost
       run: |
+        set -e
+        # Verify VST3 SDK header is present before configuring
+        VST3_HEADER="deps/iPlug2/Dependencies/IPlug/VST3_SDK/pluginterfaces/vst/ivstaudioprocessor.h"
+        if [ ! -f "$VST3_HEADER" ]; then
+          echo "::error::VST3 SDK header not found at $VST3_HEADER"
+          exit 1
+        fi
+        # Verify Visage library was built
+        VISAGE_LIB=$(find deps/visage/build -name "libvisage.a" 2>/dev/null | head -n 1)
+        if [ -z "$VISAGE_LIB" ]; then
+          echo "::error::Visage library not found under deps/visage/build/"
+          exit 1
+        fi
+        echo "✅ Visage found: $VISAGE_LIB"
+        echo "✅ VST3 SDK ready — building full plugin with BUILD_VST3=ON"
         mkdir -p build
         cd build
-        VST3_HEADER="../deps/iPlug2/Dependencies/IPlug/VST3_SDK/public.sdk/source/vst/vstsinglecomponenteffect.h"
-        if [ -f ../deps/visage/build/libvisage.a ] && [ -f "$VST3_HEADER" ]; then
-          echo "Visage and VST3 SDK available, building full plugin..."
-          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=ON -DBUILD_STANDALONE=ON ..
-        elif [ -f ../deps/visage/build/libvisage.a ]; then
-          echo "Visage available but VST3 SDK missing, building without VST3..."
-          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
-        else
-          echo "Visage not available, building DSP test only..."
-          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_DSP_TEST=ON -DBUILD_UI_TEST=ON -DBUILD_VST3=OFF -DBUILD_STANDALONE=OFF ..
-        fi
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_DSP_TEST=ON \
+              -DBUILD_UI_TEST=ON \
+              -DBUILD_VST3=ON \
+              -DBUILD_STANDALONE=OFF \
+              ..
     
     - name: Build NeuroBoost
       run: |
         cd build
         cmake --build . --config Release --parallel 2
+
+    - name: Verify VST3 binary was produced
+      shell: bash
+      run: |
+        set -e
+        VST3_FILE=$(find build -type f \( -name "NeuroBoost.so" -o -name "NeuroBoost.vst3" \) 2>/dev/null | head -n 1)
+        if [ -z "$VST3_FILE" ]; then
+          echo "::error::No VST3 binary found in build/ — the build may have failed silently"
+          find build -type f 2>/dev/null | head -20 || true
+          exit 1
+        fi
+        echo "✅ VST3 binary found: $VST3_FILE"
     
     - name: Run Tests
       run: |
