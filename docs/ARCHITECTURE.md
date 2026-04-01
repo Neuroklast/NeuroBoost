@@ -15,8 +15,11 @@
 5. [Timing Architecture](#timing-architecture)
 6. [Note-Off Management](#note-off-management)
 7. [Determinism Guarantee](#determinism-guarantee)
-8. [Mathematical Algorithms](#mathematical-algorithms)
-9. [Target File Structure](#target-file-structure)
+8. [MIDI Input Architecture](#midi-input-architecture)
+9. [Pattern Export (MIDI File)](#pattern-export-midi-file)
+10. [Keyboard Shortcuts](#keyboard-shortcuts)
+11. [Mathematical Algorithms](#mathematical-algorithms)
+12. [Target File Structure](#target-file-structure)
 
 ---
 
@@ -33,8 +36,10 @@
 │  │  SequencerEngine        │     │  EditorView                   │  │
 │  │  ├─ ProcessBlock()      │     │  ├─ draw(Canvas&)             │  │
 │  │  ├─ Algorithms          │     │  ├─ StepGrid                  │  │
-│  │  ├─ NoteTracker         │     │  ├─ FractalView               │  │
-│  │  └─ TransportSync       │     │  ├─ ParameterPanel            │  │
+│  │  ├─ NoteTracker         │     │  ├─ PresetBrowser             │  │
+│  │  ├─ TransportSync       │     │  ├─ ModeSelector (gen+MIDI)   │  │
+│  │  └─ handleMidiInput()   │     │  ├─ ParameterPanel            │  │
+│  │                         │     │  ├─ keyDown() shortcuts       │  │
 │  │                         │     │  └─ OnIdle() poll             │  │
 │  └────────┬────────────────┘     └──────────────┬────────────────┘  │
 │           │                                     │                   │
@@ -193,6 +198,16 @@ struct GlobalParams {
     float density        = 0.5f;      // 0.0–1.0
     int   generationMode = 0;         // 0=Euclidean,1=LSystem,…
     int   transportMode  = 0;         // 0=host,1=internal
+};
+
+// ---- MIDI Input (Sprint 7) -----------------------------------
+enum class MidiInputMode : int {
+    Off = 0,          // Ignore incoming MIDI (default)
+    Thru,             // Pass MIDI through unchanged
+    Transpose,        // Use incoming note as transpose offset
+    Trigger,          // Incoming note-on triggers pattern restart
+    Gate,             // Pattern only plays while note held
+    ThruAndGenerate   // Both pass-through AND generate patterns
 };
 
 // ---- Algorithm-specific parameter blocks ----------------------
@@ -394,6 +409,88 @@ void SequencerEngine::mutate() {
 
 ---
 
+## MIDI Input Architecture
+
+Sprint 7 adds 6 MIDI input modes, configured by the `kMidiInputMode` plugin parameter.
+MIDI input is processed in the audio thread via `NeuroBoost::handleMidiInput()`.
+
+### MidiInputMode Enum (Types.h)
+
+| Mode | Behavior |
+|------|----------|
+| **Off** | Ignore incoming MIDI (default) |
+| **Thru** | Pass MIDI through unchanged |
+| **Transpose** | Incoming note sets transpose offset (`noteNumber - 60`) |
+| **Trigger** | Note-on triggers `resetPlayhead()` (pattern restart) |
+| **Gate** | Pattern only plays while at least one note is held |
+| **ThruAndGenerate** | Both pass-through AND generate patterns |
+
+### SequencerEngine Support
+
+```cpp
+// Set semitone transpose offset (applied AFTER scale quantization, BEFORE octave clamp)
+void SequencerEngine::setTransposeOffset(int semitones);
+
+// Reset playhead to step 0 without regenerating the pattern
+void SequencerEngine::resetPlayhead();
+```
+
+### Thread Safety
+
+- `IMidiQueue` drains incoming MIDI in `ProcessBlock()` (audio thread).
+- `handleMidiInput()` calls engine methods directly (all audio-thread-safe).
+- Gate mode tracks `mHeldNoteCount` (audio-thread-only state, no synchronization needed).
+
+---
+
+## Pattern Export (MIDI File)
+
+`MidiExport` (`src/common/MidiExport.h/cpp`) writes Standard MIDI Files (SMF Format 0).
+This runs on the **UI thread** only — it uses file I/O, heap allocation, and STL containers.
+
+### Public API
+
+```cpp
+struct MidiExport::ExportParams {
+    const SequenceStep* steps;      // Pointer to sequence steps
+    int    stepCount;               // Number of steps (1..MAX_STEPS)
+    double bpm;                     // Tempo in beats per minute
+    int    ticksPerQuarterNote;     // SMF resolution (default 480)
+    int    rootNote;                // Base MIDI note (0..127)
+    ScaleMode scaleMode;            // For display (not used in export)
+};
+
+static bool MidiExport::writeToFile(const char* filePath, const ExportParams& params);
+```
+
+### SMF Format 0 Structure
+
+- MThd chunk: format 0, 1 track, configurable ticks-per-quarter-note
+- Tempo meta event (FF 51 03)
+- Time signature meta event (4/4)
+- Note-On/Note-Off events with delta times (VLQ encoded)
+- Ratchet support: ratcheted steps emit multiple sub-notes with velocity decay
+- End-of-track meta event
+
+---
+
+## Keyboard Shortcuts
+
+`EditorView::keyDown()` handles keyboard shortcuts for power-user workflow.
+
+| Key | Action |
+|-----|--------|
+| **Space** | Toggle play/pause |
+| **1–7** | Switch generation mode (Euclidean, Fibonacci, …, Probability) |
+| **← / →** | Navigate selected step (wraps around) |
+| **↑** | Increase velocity on selected step (+10%) |
+| **↓** | Decrease velocity on selected step (-10%) |
+| **Delete / Backspace** | Deactivate selected step |
+| **A** | Toggle accent on selected step |
+| **R** | Randomize (bump fractal seed) |
+
+---
+
 ## Mathematical Algorithms
 
 ### Euclidean Rhythms (Bjorklund Algorithm)
@@ -560,11 +657,15 @@ src/
 │   └── LockFreeQueue.h         # SPSC ring buffer (header-only template)
 │
 ├── ui/
-│   ├── EditorView.h            # Top-level visage::Frame
+│   ├── EditorView.h            # Top-level visage::Frame (preset browser, keyboard shortcuts)
 │   ├── EditorView.cpp
 │   ├── components/
-│   │   ├── StepGrid.h/cpp      # 64-step grid with playhead
-│   │   ├── StepCell.h/cpp      # Individual step cell (click, drag, right-click)
+│   │   ├── StepGrid.h/cpp      # 64-step grid with playhead + selection highlight
+│   │   ├── StepCell.h/cpp      # Individual step cell (click, drag, right-click, selected state)
+│   │   ├── PresetBrowser.h/cpp # Horizontal preset browser (left/right nav, dirty indicator)
+│   │   ├── ModeSelector.h/cpp  # Generation mode / MIDI mode dropdown
+│   │   ├── ParameterKnob.h/cpp # Per-mode parameter knobs
+│   │   ├── TransportBar.cpp    # Play/stop/reset transport
 │   │   ├── ProbabilityBar.h/cpp
 │   │   ├── Knob.h/cpp          # Reusable knob (wheel, shift-drag, dbl-click reset)
 │   │   ├── Selector.h/cpp      # Mode/scale selector
@@ -575,14 +676,17 @@ src/
 │
 ├── common/
 │   ├── Params.h                # EParams enum (single definition!)
-│   ├── Types.h                 # SequencerState, StepData, structs
-│   └── Constants.h             # MAX_STEPS, MAX_POLYPHONY, etc.
+│   ├── Types.h                 # SequencerState, StepData, MidiInputMode, MidiNote
+│   ├── Constants.h             # MAX_STEPS, MAX_POLYPHONY, etc.
+│   ├── MidiExport.h            # SMF Format 0 MIDI file writer (UI thread only)
+│   └── MidiExport.cpp
 │
 ├── NeuroBoost.h                # Plugin class (includes dsp/ and ui/)
-└── NeuroBoost.cpp              # Plugin implementation, OnIdle, ProcessBlock
+└── NeuroBoost.cpp              # Plugin implementation, OnIdle, ProcessBlock, MIDI input
 ```
 
 **Dependency rules:**
 - `dsp/` must NOT include anything from `ui/`, `visage/`, or iPlug2 UI headers.
 - `ui/` may include `dsp/` headers only for read-only data types (`Types.h`, `Constants.h`).
 - `common/` has no dependencies on `dsp/` or `ui/`.
+- `MidiExport` runs on the **UI thread** only — may use file I/O, heap allocation, STL containers.
