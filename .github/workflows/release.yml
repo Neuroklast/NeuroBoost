@@ -130,6 +130,11 @@ jobs:
         fi
         echo "✅ Visage library found: $VISAGE_LIB"
 
+    # ── Setup MSVC (Windows) ──────────────────────────────────────────────
+    - name: Setup MSVC Developer Environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+
     # ── Configure NeuroBoost ────────────────────────────────────────────────
     - name: Configure NeuroBoost
       shell: bash
@@ -137,23 +142,12 @@ jobs:
         set -e
         mkdir -p build
         cd build
-        # On Windows use NMake Makefiles for single-config, predictable output paths
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          cmake -G "NMake Makefiles" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_VST3=ON \
-                -DBUILD_DSP_TEST=OFF \
-                -DBUILD_UI_TEST=OFF \
-                -DBUILD_STANDALONE=OFF \
-                ..
-        else
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_VST3=ON \
-                -DBUILD_DSP_TEST=OFF \
-                -DBUILD_UI_TEST=OFF \
-                -DBUILD_STANDALONE=OFF \
-                ..
-        fi
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_VST3=ON \
+              -DBUILD_DSP_TEST=OFF \
+              -DBUILD_UI_TEST=OFF \
+              -DBUILD_STANDALONE=OFF \
+              ..
 
     # ── Build NeuroBoost ────────────────────────────────────────────────────
     - name: Build NeuroBoost VST3

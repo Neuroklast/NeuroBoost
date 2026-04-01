@@ -12,6 +12,8 @@
 #include "common/Presets.h"
 #include "common/Types.h"
 
+using namespace iplug;
+
 const int kNumPresets = kNumFactoryPresets;
 
 enum EParams
