@@ -311,8 +311,7 @@ void* NeuroBoost::OpenWindow(void* pParent)
         const char* pn = GetPresetName(i);
         names.push_back(pn ? pn : "Preset");
       }
-      if (mEditorView->mPresetBrowser)
-        mEditorView->mPresetBrowser->setPresetNames(std::move(names));
+      mEditorView->setPresetNames(std::move(names));
     }
   }
 

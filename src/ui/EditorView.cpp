@@ -393,6 +393,12 @@ void EditorView::updatePresetBrowser(int currentPresetIdx, bool dirty)
   }
 }
 
+void EditorView::setPresetNames(std::vector<std::string> names)
+{
+  if (mPresetBrowser)
+    mPresetBrowser->setPresetNames(std::move(names));
+}
+
 // ============================================================================
 // Keyboard shortcuts (Goal 5)
 // ============================================================================
