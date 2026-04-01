@@ -47,7 +47,7 @@ void TransportBar::drawButton(visage::Canvas& canvas, const char* label,
   canvas.fill(x, y, 1.0f, bh);
   canvas.fill(x + bw - 1.0f, y, 1.0f, bh);
 
-  visage::Font font(12);
+  visage::Font font = makeFont(12.0f);
   if (active)
     canvas.setColor(BackgroundColor);
   else
@@ -62,23 +62,23 @@ void TransportBar::mouseDown(const visage::MouseEvent& e)
   float bh = h - 8.0f;
 
   auto hitTest = [&](float bx, float bw) {
-    return e.x >= bx && e.x <= bx + bw && e.y >= by && e.y <= by + bh;
+    return e.position.x >= bx && e.position.x <= bx + bw && e.position.y >= by && e.position.y <= by + bh;
   };
 
   if (hitTest(mPlayX, mPlayW))
   {
-    mOnPlay.call();
+    mOnPlay.callback();
   }
   else if (hitTest(mStopX, mStopW))
   {
     mIsPlaying = false;
-    mOnStop.call();
+    mOnStop.callback();
     redraw();
   }
   else if (hitTest(mResetX, mResetW))
   {
     mIsPlaying = false;
-    mOnReset.call();
+    mOnReset.callback();
     redraw();
   }
 }

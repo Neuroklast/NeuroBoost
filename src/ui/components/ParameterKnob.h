@@ -26,8 +26,7 @@ public:
   void mouseDown(const visage::MouseEvent& e) override;
   void mouseDrag(const visage::MouseEvent& e) override;
   void mouseUp(const visage::MouseEvent& e) override;
-  void mouseDoubleClick(const visage::MouseEvent& e) override;
-  void mouseWheelMove(const visage::MouseEvent& e, float deltaY) override;
+  bool mouseWheel(const visage::MouseEvent& e) override;
 
   /// Set the knob value (clamped to [minVal, maxVal]).
   void setValue(double value);

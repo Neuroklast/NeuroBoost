@@ -15,7 +15,7 @@ public:
 
   void draw(visage::Canvas& canvas) override;
   void mouseDown(const visage::MouseEvent& e) override;
-  void mouseWheelMove(const visage::MouseEvent& e, float deltaY) override;
+  bool mouseWheel(const visage::MouseEvent& e) override;
 
   // -----------------------------------------------------------------------
   // Configuration

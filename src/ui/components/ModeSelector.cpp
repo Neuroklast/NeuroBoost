@@ -22,7 +22,7 @@ void ModeSelector::draw(visage::Canvas& canvas)
 
   // Current selection label
   const std::string& label = getSelectedLabel();
-  visage::Font font(12);
+  visage::Font font = makeFont(12.0f);
   canvas.setColor(TextColor);
   canvas.text(label.c_str(), font, visage::Font::kCenter,
               4.0f, 0.0f, w - 16.0f, h);
@@ -71,9 +71,9 @@ void ModeSelector::mouseDown(const visage::MouseEvent& e)
   float h     = height();
   float itemH = std::max(h, 20.0f);
 
-  if (e.y > h && !mOptions.empty())
+  if (e.position.y > h && !mOptions.empty())
   {
-    int idx = static_cast<int>((e.y - h) / itemH);
+    int idx = static_cast<int>((e.position.y - h) / itemH);
     if (idx >= 0 && idx < static_cast<int>(mOptions.size()))
     {
       selectIndex(idx);
@@ -84,15 +84,16 @@ void ModeSelector::mouseDown(const visage::MouseEvent& e)
   redraw();
 }
 
-void ModeSelector::mouseWheelMove(const visage::MouseEvent& /*e*/, float deltaY)
+bool ModeSelector::mouseWheel(const visage::MouseEvent& e)
 {
   if (mOptions.empty())
-    return;
+    return false;
 
-  int next = mSelectedIndex + (deltaY > 0.0f ? 1 : -1);
+  int next = mSelectedIndex + (e.wheel_delta_y > 0.0f ? 1 : -1);
   next = std::max(0, std::min(static_cast<int>(mOptions.size()) - 1, next));
   if (next != mSelectedIndex)
     selectIndex(next);
+  return true;
 }
 
 void ModeSelector::setOptions(std::vector<std::string> options)
@@ -126,6 +127,6 @@ void ModeSelector::selectIndex(int index)
   if (index == mSelectedIndex)
     return;
   mSelectedIndex = index;
-  mOnSelectionChanged.call(mSelectedIndex);
+  mOnSelectionChanged.callback(mSelectedIndex);
   redraw();
 }

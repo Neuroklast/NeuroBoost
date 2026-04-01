@@ -214,6 +214,27 @@ This triggers `release.yml` which builds VST3 for Linux/macOS/Windows and create
 - Known issues introduced: ...
 ```
 
+### [2026-04-01] – Sprint 6 Phase 2: Visage API Compatibility & CI Pipeline Hardening
+- What changed: Updated all UI source files (StepCell, ParameterKnob, ModeSelector,
+  TransportBar, StepGrid, EditorView) to match the current Visage API:
+  `e.position.x/y` (was `e.x/y`), `CallbackList::callback()` (was `call()`),
+  `mouseWheel(event)` (was `mouseWheelMove(event, delta)`), right-click
+  handled in `mouseDown` via `e.isRightButton()`, double-click via
+  `e.repeatClickCount() >= 2`, `Font(size, path)` constructor with CMake-defined
+  font path. Fixed `ApplicationEditor::setDimensions()` → `setBounds()` and
+  `createPluginWindow()` with `Dimension` types. Added `resource.h` for iPlug2
+  Windows builds. Added MSVC `/wd4068` pragma-mark warning suppression in CMakeLists.
+  Pinned Visage to `b0b2ee89abb3f1173dad4d80460197eb96afa724` and iPlug2 to
+  `4ca7bc02d1d0bc05e7d1c2c6b0d7c1aa0eca2bef` in all CI workflow files.
+- Files modified: resource.h (new), CMakeLists.txt, src/ui/theme/Theme.h,
+  src/ui/components/StepCell.h/cpp, src/ui/components/ParameterKnob.h/cpp,
+  src/ui/components/ModeSelector.h/cpp, src/ui/components/TransportBar.cpp,
+  src/ui/components/StepGrid.cpp, src/ui/EditorView.cpp, src/NeuroBoost.cpp,
+  .github/workflows/build.yml, .github/workflows/release.yml, docs/STATUS.md
+- Tests: 213+ DSP tests continue to pass (no DSP changes)
+- Known issues resolved: #8 (Font created in draw → now cached via makeFont helper),
+  #11 (Visage API incompatibility), #12 (missing resource.h), #13 (MSVC pragma mark)
+
 ### [2026-04-01] – Sprint 6: ALPHA Release Hardening
 - What changed: Added closed-source LICENSE file; updated README.md (proprietary);
   pinned iPlug2 to specific commit (no more GIT_TAG master); removed job-level
@@ -262,6 +283,9 @@ This triggers `release.yml` which builds VST3 for Linux/macOS/Windows and create
 | 5 | 🟢 Low | `config.h` copyright says 2024, should be 2025 | `config.h:9` | ✅ Fixed (Sprint 2) |
 | 6 | 🟢 Low | README references LICENSE file which does not exist | `README.md` | ✅ Fixed (Sprint 6) |
 | 7 | 🟡 Med | `std::ostringstream` used in draw callback (heap allocation in UI frame) | `src/NeuroBoost.cpp` | Open (Sprint 3 UI redesign) |
-| 8 | 🟡 Med | `visage::Font` created every frame in draw callback | `src/NeuroBoost.cpp` | Open (Sprint 3 UI redesign) |
+| 8 | 🟡 Med | `visage::Font` created every frame in draw callback | `src/NeuroBoost.cpp` | ✅ Fixed (Sprint 6 Ph.2, makeFont helper) |
 | 9 | 🟢 Low | CI full-plugin build has `continue-on-error: true` → silent failures | `.github/workflows/build.yml` | ✅ Fixed (Sprint 6) |
-| 10 | 🟢 Low | Dependency pinned to `GIT_TAG master` → not reproducible | `CMakeLists.txt` | ✅ Fixed (Sprint 6) |
+| 10 | 🟢 Low | Dependency pinned to `GIT_TAG master` → not reproducible | `CMakeLists.txt` | ✅ Fixed (Sprint 6 Ph.2, Visage+iPlug2 pinned) |
+| 11 | 🔴 High | Visage API incompatibility in all UI source files | `src/ui/**` | ✅ Fixed (Sprint 6 Ph.2) |
+| 12 | 🔴 High | Missing `resource.h` causes Windows builds to fail | project root | ✅ Fixed (Sprint 6 Ph.2) |
+| 13 | 🟢 Low | MSVC `#pragma mark` warnings on Windows builds | CMakeLists.txt | ✅ Fixed (Sprint 6 Ph.2, /wd4068) |

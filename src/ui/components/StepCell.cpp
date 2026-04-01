@@ -65,8 +65,17 @@ void StepCell::draw(visage::Canvas& canvas)
 
 void StepCell::mouseDown(const visage::MouseEvent& e)
 {
+  if (e.isRightButton())
+  {
+    // Right-click toggles accent mode
+    mAccent = !mAccent;
+    mOnAccentToggle.callback(mAccent);
+    redraw();
+    return;
+  }
+
   mIsDragging         = true;
-  mDragStartY         = e.y;
+  mDragStartY         = static_cast<int>(e.position.y);
   mDragStartVelocity  = mVelocity;
   mDragStartProbability = mProbability;
   mIsShiftDrag        = e.isShiftDown();
@@ -77,7 +86,7 @@ void StepCell::mouseDrag(const visage::MouseEvent& e)
   if (!mIsDragging)
     return;
 
-  int dy = mDragStartY - e.y;
+  int dy = mDragStartY - static_cast<int>(e.position.y);
   if (std::abs(dy) > 3)
   {
     if (mIsShiftDrag)
@@ -88,7 +97,7 @@ void StepCell::mouseDrag(const visage::MouseEvent& e)
       if (newProb != mProbability)
       {
         mProbability = newProb;
-        mOnProbabilityChange.call(mProbability);
+        mOnProbabilityChange.callback(mProbability);
         redraw();
       }
     }
@@ -100,7 +109,7 @@ void StepCell::mouseDrag(const visage::MouseEvent& e)
       if (newVel != mVelocity)
       {
         mVelocity = newVel;
-        mOnVelocityChange.call(mVelocity);
+        mOnVelocityChange.callback(mVelocity);
         redraw();
       }
     }
@@ -112,23 +121,15 @@ void StepCell::mouseUp(const visage::MouseEvent& e)
   if (mIsDragging)
   {
     mIsDragging = false;
-    int dy = mDragStartY - e.y;
+    int dy = mDragStartY - static_cast<int>(e.position.y);
     if (std::abs(dy) <= 3)
     {
       // Small movement = toggle
       mActive = !mActive;
-      mOnToggle.call(mActive);
+      mOnToggle.callback(mActive);
       redraw();
     }
   }
-}
-
-void StepCell::mouseRightClick(const visage::MouseEvent& /*e*/)
-{
-  // Right-click toggles accent mode
-  mAccent = !mAccent;
-  mOnAccentToggle.call(mAccent);
-  redraw();
 }
 
 void StepCell::setAccent(bool accent)
