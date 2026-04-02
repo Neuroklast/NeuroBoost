@@ -226,10 +226,12 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         NO_IGRAPHICS
         SAMPLE_TYPE_FLOAT
         _USE_MATH_DEFINES
+        RELEASE=1
     )
     
     # Platform-specific settings
     if(APPLE)
+        list(APPEND COMMON_DEFINITIONS OS_MAC=1)
         list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
         set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS version")
         
@@ -274,7 +276,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         
         set(SWELL_SOURCES "")
     elseif(UNIX)
-        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP OS_LINUX=1)
         
         find_package(X11 REQUIRED)
         find_package(PkgConfig REQUIRED)

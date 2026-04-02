@@ -12,7 +12,8 @@
 #define BUNDLE_NAME "NeuroBoost"
 #define BUNDLE_MFR "Neuroklast"
 #define BUNDLE_DOMAIN "com"
-
+#define AUV2_VIEW_CLASS NeuroBoost_View
+#define AUV2_VIEW_CLASS_STR "NeuroBoost_View"
 #define SHARED_RESOURCES_SUBPATH "NeuroBoost"
 
 #define PLUG_CHANNEL_IO "1-1 2-2"
