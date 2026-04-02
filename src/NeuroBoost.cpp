@@ -302,7 +302,7 @@ void* NeuroBoost::OpenWindow(void* pParent)
       mPresetDirty = false;
 
       // Apply preset-specific engine state that is not exposed as a kParam
-      // (fractalCy, fractalZoom, fractalThreshold, markovPreset, caRule, caIterations)
+      // (fractalCy, fractalZoom, fractalThreshold, markovPreset)
       if (idx >= 0 && idx < kNumFactoryPresets)
       {
         const PresetData& p = FACTORY_PRESETS[idx];
