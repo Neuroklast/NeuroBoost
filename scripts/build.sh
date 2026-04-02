@@ -60,8 +60,8 @@ echo ""
 echo "Build complete!"
 echo ""
 echo "Output locations:"
-if [ -f "$BUILD_DIR/bin/NeuroBoost_DSP_Test" ]; then
-    echo "  DSP Test: $BUILD_DIR/bin/NeuroBoost_DSP_Test"
+if [ -f "$BUILD_DIR/bin/test_sequencer" ]; then
+    echo "  DSP Test: $BUILD_DIR/bin/test_sequencer"
 fi
 if [ -d "$BUILD_DIR/bin" ]; then
     ls -la "$BUILD_DIR/bin/" 2>/dev/null || true

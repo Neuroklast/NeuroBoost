@@ -41,7 +41,6 @@ if(BUILD_DSP_TEST)
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/common
         ${CMAKE_SOURCE_DIR}/src/dsp
-        ${CMAKE_SOURCE_DIR}/src/common
     )
 
     target_compile_definitions(test_sequencer PRIVATE
@@ -113,16 +112,28 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
     include(FetchContent)
     
     # Fetch iPlug2 if not present
+    # GIT_SHALLOW FALSE is required because GIT_TAG is a commit SHA (not a branch/tag).
+    # Shallow clone with arbitrary commit hashes is not supported by all git hosts.
     if(NOT EXISTS "${IPLUG2_ROOT}")
         message(STATUS "Downloading iPlug2...")
         FetchContent_Declare(
             iPlug2
             GIT_REPOSITORY https://github.com/iPlug2/iPlug2.git
             GIT_TAG 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
-            GIT_SHALLOW TRUE
+            GIT_SHALLOW FALSE
             SOURCE_DIR "${IPLUG2_ROOT}"
         )
         FetchContent_MakeAvailable(iPlug2)
+        # FetchContent does not recurse into submodules — manually init VST3_SDK
+        execute_process(
+            COMMAND git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
+            WORKING_DIRECTORY "${IPLUG2_ROOT}"
+            RESULT_VARIABLE _submod_result
+        )
+        if(NOT _submod_result EQUAL 0)
+            message(WARNING "Failed to init VST3_SDK submodule via FetchContent. "
+                "You may need to run: cd ${IPLUG2_ROOT} && git submodule update --init --recursive Dependencies/IPlug/VST3_SDK")
+        endif()
     endif()
     
     # Check for Visage
@@ -408,6 +419,13 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
                 ${APP_EXTRA_LIBS}
             )
 
+            # Define the embedded Lato font path for UI text rendering (standalone)
+            set(_lato_font_path_app "${VISAGE_ROOT}/visage_graphics/fonts/Lato-Regular.ttf")
+            if(EXISTS "${_lato_font_path_app}")
+                target_compile_definitions(NeuroBoost_Standalone PRIVATE
+                    NEUROBOOST_FONT_PATH="${_lato_font_path_app}")
+            endif()
+
             set_target_properties(NeuroBoost_Standalone PROPERTIES
                 OUTPUT_NAME "NeuroBoost"
                 RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
@@ -467,12 +485,16 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp
         )
         
+        # SWELL stubs: only needed for standalone on macOS/Linux, not for VST3.
+        # The VST3 host provides the OS window; SWELL stubs would be dead code.
+        set(VST3_SWELL_SOURCES "")
+        
         set(VST3_SOURCES
             ${PLUGIN_SOURCES}
             ${IPLUG_CORE_SOURCES}
             ${IPLUG_VST3_SOURCES}
             ${VST3_SDK_SOURCES}
-            ${SWELL_SOURCES}
+            ${VST3_SWELL_SOURCES}
         )
         
         add_library(NeuroBoost_VST3 MODULE ${VST3_SOURCES})
@@ -532,13 +554,58 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
                     "${CMAKE_BINARY_DIR}/vst3/NeuroBoost.vst3/Contents/MacOS/NeuroBoost"
                 COMMENT "Creating macOS VST3 bundle structure"
             )
+            # Generate Info.plist for macOS VST3 bundle (required for host discovery)
+            file(WRITE "${CMAKE_BINARY_DIR}/vst3/NeuroBoost.vst3/Contents/Info.plist"
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+<plist version=\"1.0\">\n\
+<dict>\n\
+  <key>CFBundleDevelopmentRegion</key>\n\
+  <string>English</string>\n\
+  <key>CFBundleExecutable</key>\n\
+  <string>NeuroBoost</string>\n\
+  <key>CFBundleGetInfoString</key>\n\
+  <string>${PLUG_VERSION} ${PLUG_MFR}</string>\n\
+  <key>CFBundleIdentifier</key>\n\
+  <string>com.${PLUG_MFR}.vst3.${PLUG_NAME}</string>\n\
+  <key>CFBundleInfoDictionaryVersion</key>\n\
+  <string>6.0</string>\n\
+  <key>CFBundleName</key>\n\
+  <string>${PLUG_NAME}</string>\n\
+  <key>CFBundlePackageType</key>\n\
+  <string>BNDL</string>\n\
+  <key>CFBundleShortVersionString</key>\n\
+  <string>${PLUG_VERSION}</string>\n\
+  <key>CFBundleSignature</key>\n\
+  <string>NrBs</string>\n\
+  <key>CFBundleVersion</key>\n\
+  <string>${PLUG_VERSION}</string>\n\
+  <key>LSMinimumSystemVersion</key>\n\
+  <string>10.15</string>\n\
+</dict>\n\
+</plist>\n")
         elseif(WIN32)
             set_target_properties(NeuroBoost_VST3 PROPERTIES
                 SUFFIX ".vst3"
             )
         else()
+            # Linux: output .so inside a proper VST3 bundle directory
             set_target_properties(NeuroBoost_VST3 PROPERTIES
                 SUFFIX ".so"
+            )
+            # Determine Linux arch for VST3 bundle path
+            if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+                set(_vst3_arch "x86_64-linux")
+            else()
+                set(_vst3_arch "i386-linux")
+            endif()
+            add_custom_command(TARGET NeuroBoost_VST3 POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "${CMAKE_BINARY_DIR}/vst3/NeuroBoost.vst3/Contents/${_vst3_arch}"
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    "$<TARGET_FILE:NeuroBoost_VST3>"
+                    "${CMAKE_BINARY_DIR}/vst3/NeuroBoost.vst3/Contents/${_vst3_arch}/NeuroBoost.so"
+                COMMENT "Creating Linux VST3 bundle structure"
             )
         endif()
     elseif(BUILD_VST3)
