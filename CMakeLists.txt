@@ -275,6 +275,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             d2d1
             dwrite
             shlwapi
+            comctl32
         )
         
         set(SWELL_SOURCES "")
@@ -387,7 +388,11 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
                 ${SWELL_STANDALONE_SOURCES}
             )
 
-            add_executable(NeuroBoost_Standalone ${STANDALONE_SOURCES})
+            if(WIN32)
+                add_executable(NeuroBoost_Standalone WIN32 ${STANDALONE_SOURCES})
+            else()
+                add_executable(NeuroBoost_Standalone ${STANDALONE_SOURCES})
+            endif()
 
             target_include_directories(NeuroBoost_Standalone PRIVATE ${COMMON_INCLUDES})
             target_compile_definitions(NeuroBoost_Standalone PRIVATE
