@@ -31,7 +31,7 @@ public:
 
   void draw(visage::Canvas& canvas) override;
   void resized() override;
-  bool keyDown(const visage::KeyEvent& e) override;
+  bool keyDown(const visage::KeyEvent& e);
 
   // -----------------------------------------------------------------------
   // Runtime updates from the audio thread (called from OnIdle)

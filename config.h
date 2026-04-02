@@ -59,3 +59,14 @@
 #define APP_MULT 1
 #define APP_COPY_AUV3 0
 #define APP_SIGNAL_VECTOR_SIZE 64
+
+// Linux: iPlug2 does not define BUNDLE_ID or APP_GROUP_ID for the Linux target.
+// Define them here so that MakeConfig() in IPlug_include_in_plug_src.h compiles.
+#ifdef __linux__
+  #ifndef BUNDLE_ID
+    #define BUNDLE_ID BUNDLE_DOMAIN "." BUNDLE_MFR ".vst3." BUNDLE_NAME
+  #endif
+  #ifndef APP_GROUP_ID
+    #define APP_GROUP_ID ""
+  #endif
+#endif

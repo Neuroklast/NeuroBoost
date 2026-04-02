@@ -12,6 +12,14 @@
 #include "common/Presets.h"
 #include "common/Types.h"
 
+// iPlug2 at commit 3b32d40 does not auto-import its types into global scope.
+using iplug::InstanceInfo;
+using iplug::sample;
+using iplug::IMidiMsg;
+using iplug::IMidiQueue;
+using iplug::ITimeInfo;
+using iplug::IEditorDelegate;
+
 const int kNumPresets = kNumFactoryPresets;
 
 enum EParams
