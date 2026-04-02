@@ -48,23 +48,22 @@ jobs:
       shell: bash
       run: |
         set -e
+        IPLUG2_DIR="$GITHUB_WORKSPACE/deps/iPlug2"
         mkdir -p deps
-        cd deps
-        git clone https://github.com/iPlug2/iPlug2.git
-        cd iPlug2
+        git clone https://github.com/iPlug2/iPlug2.git "$IPLUG2_DIR"
+        cd "$IPLUG2_DIR"
         git checkout ${{ env.IPLUG2_COMMIT }}
         git submodule update --init --recursive Dependencies/IPlug/VST3_SDK || true
 
         # Verify VST3 SDK header; fall back to direct clone if submodule failed
-        VST3_SDK_DIR="Dependencies/IPlug/VST3_SDK"
-        VST3_HEADER="$VST3_SDK_DIR/pluginterfaces/vst/ivstaudioprocessor.h"
+        VST3_HEADER="$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK/pluginterfaces/vst/ivstaudioprocessor.h"
         if [ ! -f "$VST3_HEADER" ]; then
           echo "::warning::VST3_SDK submodule failed or incomplete — cloning directly from steinbergmedia/vst3sdk"
-          rm -rf "$VST3_SDK_DIR"
-          git clone --branch v3.7.7_build_19 --depth 1 https://github.com/steinbergmedia/vst3sdk.git "$VST3_SDK_DIR"
-          cd "$VST3_SDK_DIR"
-          git submodule update --init --recursive
-          cd ../..
+          rm -rf "$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK"
+          git clone --branch v3.7.7_build_19 --depth 1 \
+            https://github.com/steinbergmedia/vst3sdk.git \
+            "$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK"
+          (cd "$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK" && git submodule update --init --recursive)
         fi
 
         # Final verification
@@ -79,9 +78,8 @@ jobs:
       shell: bash
       run: |
         set -e
-        cd deps
-        git clone https://github.com/VitalAudio/visage.git
-        cd visage
+        git clone https://github.com/VitalAudio/visage.git "$GITHUB_WORKSPACE/deps/visage"
+        cd "$GITHUB_WORKSPACE/deps/visage"
         git checkout ${{ env.VISAGE_COMMIT }}
 
     # ── Build Visage ────────────────────────────────────────────────────────
