@@ -281,9 +281,6 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         list(APPEND IPLUG_CORE_SOURCES
             ${IPLUG2_ROOT}/WDL/win32_utf8.c
         )
-        list(APPEND VST3_SDK_SOURCES
-            "${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK/public.sdk/source/main/dllmain.cpp"
-        )
     elseif(UNIX)
         list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP OS_LINUX)
         
@@ -319,6 +316,10 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         message(STATUS "Building Visage library...")
         set(VISAGE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
         set(VISAGE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+
+        # If cross-compiling on Linux for Windows, Visage's embedded shader compilation
+        # using shaderc will fail to produce HLSL. But this branch is meant for native
+        # compilation. We just use add_subdirectory here for normal builds.
         add_subdirectory(${VISAGE_ROOT} ${CMAKE_BINARY_DIR}/visage_build EXCLUDE_FROM_ALL)
     endif()
 
@@ -464,6 +465,12 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             "${VST3_SDK_ROOT}/public.sdk/source/main/pluginfactory.cpp"
         )
         
+        if(WIN32)
+            list(APPEND VST3_SDK_SOURCES
+                "${VST3_SDK_ROOT}/public.sdk/source/main/dllmain.cpp"
+            )
+        endif()
+
         set(IPLUG_VST3_SOURCES
             ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3.cpp
             ${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp
