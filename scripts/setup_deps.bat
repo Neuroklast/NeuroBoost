@@ -8,9 +8,15 @@ set SCRIPT_DIR=%~dp0
 set PROJECT_ROOT=%SCRIPT_DIR%..
 set DEPS_DIR=%PROJECT_ROOT%\deps
 
+REM Pin dependency versions to match CI (see .github/workflows/build.yml)
+set IPLUG2_COMMIT=3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
+set VISAGE_COMMIT=b0b2ee89abb3f1173dad4d80460197eb96afa724
+
 echo Setting up NeuroBoost dependencies...
 echo Project root: %PROJECT_ROOT%
 echo Dependencies directory: %DEPS_DIR%
+echo iPlug2 commit: %IPLUG2_COMMIT%
+echo Visage commit: %VISAGE_COMMIT%
 
 if not exist "%DEPS_DIR%" mkdir "%DEPS_DIR%"
 cd /d "%DEPS_DIR%"
@@ -18,12 +24,20 @@ cd /d "%DEPS_DIR%"
 REM Clone and setup iPlug2
 if not exist "iPlug2" (
     echo Cloning iPlug2...
-    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/iPlug2/iPlug2.git
+    git clone https://github.com/iPlug2/iPlug2.git
     if errorlevel 1 (
         echo Failed to clone iPlug2!
         exit /b 1
     )
-    echo iPlug2 cloned successfully
+    cd /d iPlug2
+    git checkout %IPLUG2_COMMIT%
+    if errorlevel 1 (
+        echo Failed to checkout iPlug2 commit!
+        exit /b 1
+    )
+    git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
+    cd /d "%DEPS_DIR%"
+    echo iPlug2 cloned and pinned to %IPLUG2_COMMIT%
 ) else (
     echo iPlug2 already exists, skipping clone
 )
@@ -31,13 +45,18 @@ if not exist "iPlug2" (
 REM Clone and build Visage
 if not exist "visage" (
     echo Cloning Visage...
-    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/VitalAudio/visage.git
+    git clone https://github.com/VitalAudio/visage.git
     if errorlevel 1 (
         echo Failed to clone Visage!
         exit /b 1
     )
-    
-    cd visage
+
+    cd /d visage
+    git checkout %VISAGE_COMMIT%
+    if errorlevel 1 (
+        echo Failed to checkout Visage commit!
+        exit /b 1
+    )
     
     echo Building Visage...
     if not exist "build" mkdir build
@@ -52,9 +71,9 @@ if not exist "visage" (
         echo Visage build failed!
         exit /b 1
     )
-    cd ..\..
+    cd /d "%DEPS_DIR%"
     
-    echo Visage built successfully
+    echo Visage built successfully (pinned to %VISAGE_COMMIT%)
 ) else (
     echo Visage already exists, checking build...
     if not exist "visage\build\Release\visage.lib" (
@@ -65,7 +84,7 @@ if not exist "visage" (
             cd build
             cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
             cmake --build . --config Release --parallel
-            cd ..\..
+            cd /d "%DEPS_DIR%"
         )
     )
 )

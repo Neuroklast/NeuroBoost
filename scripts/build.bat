@@ -73,7 +73,7 @@ echo.
 echo Build complete!
 echo.
 echo Output locations:
-echo   DSP Test: %BUILD_DIR%\bin\NeuroBoost_DSP_Test.exe
+echo   DSP Test: %BUILD_DIR%\bin\test_sequencer.exe
 if "%BUILD_FULL_PLUGIN%"=="ON" (
     echo   Standalone: %BUILD_DIR%\bin\
     echo   VST3: %BUILD_DIR%\vst3\

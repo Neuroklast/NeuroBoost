@@ -300,6 +300,18 @@ void* NeuroBoost::OpenWindow(void* pParent)
     browser = [this](int idx) {
       RestorePreset(idx);
       mPresetDirty = false;
+
+      // Apply preset-specific engine state that is not exposed as a kParam
+      // (fractalCy, fractalZoom, fractalThreshold, markovPreset, caRule, caIterations)
+      if (idx >= 0 && idx < kNumFactoryPresets)
+      {
+        const PresetData& p = FACTORY_PRESETS[idx];
+        mEngine.setFractalParams(
+          p.fractalCx, p.fractalCy, p.fractalZoom,
+          p.fractalMaxIter, p.fractalThreshold);
+        mEngine.setMarkovPreset(p.markovPreset);
+        mEngine.regeneratePattern();
+      }
     };
 
     // Populate preset names in the browser widget
