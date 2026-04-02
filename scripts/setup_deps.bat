@@ -27,15 +27,32 @@ if not exist "iPlug2" (
     git clone https://github.com/iPlug2/iPlug2.git
     if errorlevel 1 (
         echo Failed to clone iPlug2!
+        pause
         exit /b 1
     )
     cd /d iPlug2
     git checkout %IPLUG2_COMMIT%
     if errorlevel 1 (
         echo Failed to checkout iPlug2 commit!
+        pause
         exit /b 1
     )
-    git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
+
+    echo Downloading VST3_SDK...
+    cd Dependencies\IPlug
+    if exist VST3_SDK rmdir /s /q VST3_SDK
+    git clone https://github.com/steinbergmedia/vst3sdk.git --branch master --single-branch --depth=1 VST3_SDK
+    if errorlevel 1 (
+        echo Failed to clone VST3 SDK!
+        pause
+        exit /b 1
+    )
+    cd VST3_SDK
+    git submodule update --init pluginterfaces
+    git submodule update --init base
+    git submodule update --init public.sdk
+    git submodule update --init cmake
+    git submodule update --init vstgui4
     cd /d "%DEPS_DIR%"
     echo iPlug2 cloned and pinned to %IPLUG2_COMMIT%
 ) else (
@@ -48,6 +65,7 @@ if not exist "visage" (
     git clone https://github.com/VitalAudio/visage.git
     if errorlevel 1 (
         echo Failed to clone Visage!
+        pause
         exit /b 1
     )
 
@@ -55,6 +73,7 @@ if not exist "visage" (
     git checkout %VISAGE_COMMIT%
     if errorlevel 1 (
         echo Failed to checkout Visage commit!
+        pause
         exit /b 1
     )
     
@@ -64,11 +83,13 @@ if not exist "visage" (
     cmake -DVISAGE_BUILD_EXAMPLES=OFF -DVISAGE_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
     if errorlevel 1 (
         echo CMake configuration for Visage failed!
+        pause
         exit /b 1
     )
     cmake --build . --config Release --parallel
     if errorlevel 1 (
         echo Visage build failed!
+        pause
         exit /b 1
     )
     cd /d "%DEPS_DIR%"
