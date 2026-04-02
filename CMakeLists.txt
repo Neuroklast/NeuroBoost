@@ -247,7 +247,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${IPLUG2_ROOT}/WDL/swell/swell-modstub-generic.cpp
         )
     elseif(WIN32)
-        list(APPEND COMMON_DEFINITIONS NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+        list(APPEND COMMON_DEFINITIONS NOMINMAX _CRT_SECURE_NO_WARNINGS)
         
         set(PLATFORM_LIBS
             d3d11
@@ -257,6 +257,8 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             winmm
             ole32
             uuid
+            comdlg32
+            shell32
         )
         
         set(SWELL_SOURCES "")
@@ -505,7 +507,6 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             )
             # Windows SDK headers for ASIO/RTAudio COM support
             target_compile_definitions(NeuroBoost_VST3 PRIVATE
-                WIN32_LEAN_AND_MEAN
                 NOMINMAX
             )
         endif()

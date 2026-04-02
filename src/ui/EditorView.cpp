@@ -409,7 +409,7 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   int sel = mStepGrid ? mStepGrid->getSelectedStep() : -1;
 
   // Space → toggle transport (play/pause)
-  if (e.key_code == visage::KeyEvent::kSpace)
+  if (e.key_code == visage::KeyCode::Space)
   {
     if (mTransportBar)
       mTransportBar->onPlayPause().callback();
@@ -417,24 +417,34 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   }
 
   // 1–7 → switch generation mode
-  if (e.key_code >= '1' && e.key_code <= '7')
   {
-    int mode = e.key_code - '1';
-    mSetParam(kGenMode, static_cast<double>(mode));
-    if (mGenModeSelector)
-      mGenModeSelector->setSelectedIndex(mode);
-    return true;
+    // Map KeyCode::Number1..Number7 → mode 0..6
+    static constexpr visage::KeyCode numKeys[] = {
+      visage::KeyCode::Number1, visage::KeyCode::Number2, visage::KeyCode::Number3,
+      visage::KeyCode::Number4, visage::KeyCode::Number5, visage::KeyCode::Number6,
+      visage::KeyCode::Number7
+    };
+    for (int i = 0; i < 7; ++i)
+    {
+      if (e.key_code == numKeys[i])
+      {
+        mSetParam(kGenMode, static_cast<double>(i));
+        if (mGenModeSelector)
+          mGenModeSelector->setSelectedIndex(i);
+        return true;
+      }
+    }
   }
 
   // Arrow keys — move selection
-  if (e.key_code == visage::KeyEvent::kLeftArrow)
+  if (e.key_code == visage::KeyCode::Left)
   {
     if (sel <= 0) sel = stepCount - 1;
     else          sel = sel - 1;
     if (mStepGrid) mStepGrid->setSelectedStep(sel);
     return true;
   }
-  if (e.key_code == visage::KeyEvent::kRightArrow)
+  if (e.key_code == visage::KeyCode::Right)
   {
     sel = (sel < 0) ? 0 : (sel + 1) % stepCount;
     if (mStepGrid) mStepGrid->setSelectedStep(sel);
@@ -442,13 +452,13 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   }
 
   // Up/Down — velocity ±10% on selected step
-  if (e.key_code == visage::KeyEvent::kUpArrow && sel >= 0)
+  if (e.key_code == visage::KeyCode::Up && sel >= 0)
   {
     if (mOnStepVelocityChanged)
       mOnStepVelocityChanged(sel, 0.1);  // relative hint; plugin layer can interpret
     return true;
   }
-  if (e.key_code == visage::KeyEvent::kDownArrow && sel >= 0)
+  if (e.key_code == visage::KeyCode::Down && sel >= 0)
   {
     if (mOnStepVelocityChanged)
       mOnStepVelocityChanged(sel, -0.1);
@@ -456,8 +466,8 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   }
 
   // Delete / Backspace → clear selected step
-  if ((e.key_code == visage::KeyEvent::kDelete ||
-       e.key_code == visage::KeyEvent::kBackspace) && sel >= 0)
+  if ((e.key_code == visage::KeyCode::Delete ||
+       e.key_code == visage::KeyCode::Backspace) && sel >= 0)
   {
     if (mOnStepActiveChanged)
       mOnStepActiveChanged(sel, false);
@@ -467,7 +477,7 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   }
 
   // A → toggle accent on selected step
-  if ((e.key_code == 'A' || e.key_code == 'a') && sel >= 0)
+  if ((e.key_code == visage::KeyCode::A) && sel >= 0)
   {
     if (mOnStepAccentToggled)
       mOnStepAccentToggled(sel, true);
@@ -475,7 +485,7 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   }
 
   // R → randomize (re-trigger generation with new seed)
-  if (e.key_code == 'R' || e.key_code == 'r')
+  if (e.key_code == visage::KeyCode::R)
   {
     double curSeed = mGetParam(kFractalSeed);
     mSetParam(kFractalSeed, std::fmod(curSeed + 1.0, 99999.0));
@@ -483,14 +493,14 @@ bool EditorView::keyDown(const visage::KeyEvent& e)
   }
 
   // Ctrl+C / Cmd+C → copy pattern
-  if ((e.key_code == 'C' || e.key_code == 'c') && e.isControlDown())
+  if (e.key_code == visage::KeyCode::C && e.isMainModifier())
   {
     if (mOnCopyPattern) mOnCopyPattern();
     return true;
   }
 
   // E → export MIDI
-  if (e.key_code == 'E' || e.key_code == 'e')
+  if (e.key_code == visage::KeyCode::E)
   {
     if (mOnExportMidi) mOnExportMidi();
     return true;
