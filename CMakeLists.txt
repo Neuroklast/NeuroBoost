@@ -282,7 +282,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             ${IPLUG2_ROOT}/WDL/win32_utf8.c
         )
     elseif(UNIX)
-        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP OS_LINUX)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP)
         
         find_package(X11 REQUIRED)
         find_package(PkgConfig REQUIRED)
