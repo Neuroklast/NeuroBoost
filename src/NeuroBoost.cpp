@@ -15,7 +15,7 @@
 #include "ui/theme/Theme.h"
 
 NeuroBoost::NeuroBoost(const InstanceInfo& info)
-: iplug::Plugin(info, MakeConfig(kNumParams, kNumPresets))
+: iplug::Plugin(info, iplug::MakeConfig(kNumParams, kNumPresets))
 {
   // Step sequencer parameters
   GetParam(kStepCount)->InitInt("Step Count", DEFAULT_STEP_COUNT, 1, MAX_STEPS);
@@ -367,9 +367,8 @@ void NeuroBoost::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
     mMidiQueue.Remove();
   }
 
-  // Get host transport info
-  ITimeInfo timeInfo;
-  GetTimeInfo(timeInfo);
+  // Get host transport info via protected mTimeInfo (iPlug2 3b32d40 API)
+  const ITimeInfo& timeInfo = mTimeInfo;
 
   // Gate mode: only run the engine while at least one MIDI note is held
   const MidiInputMode midiMode =
@@ -380,7 +379,7 @@ void NeuroBoost::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
   {
     // Update sequencer engine
     mEngine.processBlock(timeInfo.mPPQPos, timeInfo.mTempo,
-                         timeInfo.mTransportIsPlaying, nFrames, GetSampleRate());
+                         timeInfo.mTransportIsRunning, nFrames, GetSampleRate());
 
     // Send MIDI Note-Ons
     for (int i = 0; i < mEngine.getOutputNoteCount(); ++i)

@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
 
+env:
+  IPLUG2_COMMIT: "3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1"
+  VISAGE_COMMIT: "b0b2ee89abb3f1173dad4d80460197eb96afa724"
+
 jobs:
   build-vst3:
     name: Build VST3 (${{ matrix.os }})
@@ -21,21 +25,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v4
-
-    # ── Linux dependencies ──────────────────────────────────────────────────
-    - name: Setup dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        set -e
-        sudo apt-get update
-        sudo apt-get install -y build-essential cmake git \
-          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-          libgl1-mesa-dev libfreetype6-dev libharfbuzz-dev \
-          libasound2-dev libgtk-3-dev pkg-config
 
     # ── macOS dependencies ──────────────────────────────────────────────────
     - name: Setup dependencies (macOS)
@@ -43,28 +36,34 @@ jobs:
       run: |
         brew install cmake || true
 
+    # ── Windows: set up MSVC environment ───────────────────────────────────
+    - name: Setup MSVC environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     # ── Clone iPlug2 + VST3 SDK ─────────────────────────────────────────────
     - name: Clone iPlug2 + VST3 SDK
       shell: bash
       run: |
         set -e
+        IPLUG2_DIR="$GITHUB_WORKSPACE/deps/iPlug2"
         mkdir -p deps
-        cd deps
-        git clone https://github.com/iPlug2/iPlug2.git
-        cd iPlug2
-        git checkout 3b32d40f2b2da1f64ce2e5a6552f5bde7c76f2b1
+        git clone https://github.com/iPlug2/iPlug2.git "$IPLUG2_DIR"
+        cd "$IPLUG2_DIR"
+        git checkout ${{ env.IPLUG2_COMMIT }}
         git submodule update --init --recursive Dependencies/IPlug/VST3_SDK || true
 
         # Verify VST3 SDK header; fall back to direct clone if submodule failed
-        VST3_SDK_DIR="Dependencies/IPlug/VST3_SDK"
-        VST3_HEADER="$VST3_SDK_DIR/pluginterfaces/vst/ivstaudioprocessor.h"
+        VST3_HEADER="$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK/pluginterfaces/vst/ivstaudioprocessor.h"
         if [ ! -f "$VST3_HEADER" ]; then
           echo "::warning::VST3_SDK submodule failed or incomplete — cloning directly from steinbergmedia/vst3sdk"
-          rm -rf "$VST3_SDK_DIR"
-          git clone --branch v3.7.7_build_19 --depth 1 https://github.com/steinbergmedia/vst3sdk.git "$VST3_SDK_DIR"
-          cd "$VST3_SDK_DIR"
-          git submodule update --init --recursive
-          cd ../..
+          rm -rf "$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK"
+          git clone --branch v3.7.7_build_19 --depth 1 \
+            https://github.com/steinbergmedia/vst3sdk.git \
+            "$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK"
+          (cd "$IPLUG2_DIR/Dependencies/IPlug/VST3_SDK" && git submodule update --init --recursive)
         fi
 
         # Final verification
@@ -79,10 +78,9 @@ jobs:
       shell: bash
       run: |
         set -e
-        cd deps
-        git clone https://github.com/VitalAudio/visage.git
-        cd visage
-        git checkout b0b2ee89abb3f1173dad4d80460197eb96afa724
+        git clone https://github.com/VitalAudio/visage.git "$GITHUB_WORKSPACE/deps/visage"
+        cd "$GITHUB_WORKSPACE/deps/visage"
+        git checkout ${{ env.VISAGE_COMMIT }}
 
     # ── Build Visage ────────────────────────────────────────────────────────
     - name: Build Visage
@@ -137,24 +135,20 @@ jobs:
       shell: bash
       run: |
         set -e
-        mkdir -p build
-        cd build
-        # On Windows use NMake Makefiles for single-config, predictable output paths
         if [ "$RUNNER_OS" = "Windows" ]; then
-          cmake -G "NMake Makefiles" \
+          cmake -B build -A x64 \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_VST3=ON \
                 -DBUILD_DSP_TEST=OFF \
                 -DBUILD_UI_TEST=OFF \
-                -DBUILD_STANDALONE=OFF \
-                ..
+                -DBUILD_STANDALONE=OFF
         else
-          cmake -DCMAKE_BUILD_TYPE=Release \
+          cmake -B build \
+                -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_VST3=ON \
                 -DBUILD_DSP_TEST=OFF \
                 -DBUILD_UI_TEST=OFF \
-                -DBUILD_STANDALONE=OFF \
-                ..
+                -DBUILD_STANDALONE=OFF
         fi
 
     # ── Build NeuroBoost ────────────────────────────────────────────────────
@@ -162,8 +156,7 @@ jobs:
       shell: bash
       run: |
         set -e
-        cd build
-        cmake --build . --config Release --parallel 2
+        cmake --build build --config Release --parallel 2
 
     # ── Debug: list what was built ──────────────────────────────────────────
     - name: Debug - List build output
@@ -175,25 +168,6 @@ jobs:
         find build -type f \( -name "*.vst3" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null || echo "none found"
 
     # ── Package artifact ────────────────────────────────────────────────────
-    - name: Package VST3 artifact (Linux)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        set -e
-        mkdir -p dist
-        # Linux VST3 output is a shared library (.so); fall back to .vst3 bundle name
-        if [ -f build/vst3/NeuroBoost.so ]; then
-          cp build/vst3/NeuroBoost.so dist/NeuroBoost-linux.so
-        elif [ -d build/vst3/NeuroBoost.vst3 ] || [ -f build/vst3/NeuroBoost.vst3 ]; then
-          cp -r build/vst3/NeuroBoost.vst3 dist/NeuroBoost-linux.vst3
-        else
-          echo "ERROR: No VST3 output found in build/vst3/"
-          ls -laR build/vst3/ 2>/dev/null || echo "build/vst3/ does not exist"
-          find build -type f \( -name "*.vst3" -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null || echo "none found"
-          exit 1
-        fi
-        ls -la dist/
-
     - name: Package VST3 artifact (macOS)
       if: runner.os == 'macOS'
       shell: bash
@@ -285,3 +259,4 @@ jobs:
         draft: false
         prerelease: ${{ contains(steps.tag.outputs.value, '-alpha') || contains(steps.tag.outputs.value, '-beta') || contains(steps.tag.outputs.value, '-rc') }}
         files: release-artifacts/**/*
+
