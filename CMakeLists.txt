@@ -272,11 +272,20 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             uuid
             comdlg32
             shell32
+            d2d1
+            dwrite
+            shlwapi
         )
         
         set(SWELL_SOURCES "")
+        list(APPEND IPLUG_CORE_SOURCES
+            ${IPLUG2_ROOT}/WDL/win32_utf8.c
+        )
+        list(APPEND VST3_SDK_SOURCES
+            "${IPLUG2_ROOT}/Dependencies/IPlug/VST3_SDK/public.sdk/source/main/dllmain.cpp"
+        )
     elseif(UNIX)
-        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP OS_LINUX=1)
+        list(APPEND COMMON_DEFINITIONS SWELL_PROVIDED_BY_APP OS_LINUX)
         
         find_package(X11 REQUIRED)
         find_package(PkgConfig REQUIRED)
@@ -305,46 +314,18 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
         )
     endif()
     
-    # Find Visage library - check multiple candidate locations
-    set(VISAGE_LIBRARY "")
-    foreach(_visage_candidate
-        "${VISAGE_ROOT}/build/libvisage.a"
-        "${VISAGE_ROOT}/build/Release/libvisage.a"
-        "${VISAGE_ROOT}/build/Release/visage.lib"
-        "${VISAGE_ROOT}/build/Debug/visage.lib"
-        "${VISAGE_ROOT}/build/lib/libvisage.a"
-        "${VISAGE_ROOT}/build/visage/libvisage.a"
-    )
-        if(EXISTS "${_visage_candidate}")
-            set(VISAGE_LIBRARY "${_visage_candidate}")
-            message(STATUS "Found Visage library: ${VISAGE_LIBRARY}")
-            break()
-        endif()
-    endforeach()
-    if(NOT VISAGE_LIBRARY AND TARGET visage)
-        set(VISAGE_LIBRARY visage)
-    endif()
-    # Fallback: search recursively under build/
-    if(NOT VISAGE_LIBRARY AND EXISTS "${VISAGE_ROOT}/build")
-        file(GLOB_RECURSE _visage_search
-            "${VISAGE_ROOT}/build/**/libvisage.a"
-            "${VISAGE_ROOT}/build/**/visage.lib"
-        )
-        if(_visage_search)
-            list(GET _visage_search 0 VISAGE_LIBRARY)
-            message(STATUS "Found Visage library via search: ${VISAGE_LIBRARY}")
-        endif()
-    endif()
-    
-    # Build Visage if not already built
-    if(NOT VISAGE_LIBRARY AND EXISTS "${VISAGE_ROOT}/CMakeLists.txt")
+    # Add Visage as a subdirectory to resolve all dependencies (bgfx, bimg, bx, freetype, etc.) automatically
+    if(NOT TARGET visage AND EXISTS "${VISAGE_ROOT}/CMakeLists.txt")
         message(STATUS "Building Visage library...")
         set(VISAGE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
         set(VISAGE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         add_subdirectory(${VISAGE_ROOT} ${CMAKE_BINARY_DIR}/visage_build EXCLUDE_FROM_ALL)
-        if(TARGET visage)
-            set(VISAGE_LIBRARY visage)
-        endif()
+    endif()
+
+    if(TARGET visage)
+        set(VISAGE_LIBRARY visage)
+    else()
+        message(FATAL_ERROR "Visage library target not found. Please ensure Visage is cloned to ${VISAGE_ROOT}")
     endif()
     
     # Create standalone target
@@ -480,6 +461,7 @@ if(BUILD_VST3 OR BUILD_STANDALONE)
             "${VST3_SDK_ROOT}/public.sdk/source/vst/vstinitiids.cpp"
             "${VST3_SDK_ROOT}/public.sdk/source/vst/vstparameters.cpp"
             "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.cpp"
+            "${VST3_SDK_ROOT}/public.sdk/source/main/pluginfactory.cpp"
         )
         
         set(IPLUG_VST3_SOURCES
