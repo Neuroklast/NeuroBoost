@@ -35,7 +35,10 @@ if not exist "iPlug2" (
         echo Failed to checkout iPlug2 commit!
         exit /b 1
     )
-    git submodule update --init --recursive Dependencies/IPlug/VST3_SDK
+
+    echo Downloading VST3_SDK...
+    cd Dependencies\IPlug
+    bash ./download-vst3-sdk.sh
     cd /d "%DEPS_DIR%"
     echo iPlug2 cloned and pinned to %IPLUG2_COMMIT%
 ) else (
